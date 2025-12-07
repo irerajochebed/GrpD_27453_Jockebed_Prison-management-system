@@ -7,77 +7,64 @@
 -- Database: grpD_27453_jockebed_PrisonManagementSystem_db
 -- ============================================================
 
--- IMPORTANT: Execute this script as SYSDBA in the Container Database (CDB)
--- Connection: sqlplus sys/your_password@CDB as sysdba
+-- ============================================================
+-- PDB Creation 
+-- Prison Management System
+-- ============================================================
+-- Execute as: sqlplus sys/password as sysdba
+-- ============================================================
 
--- Step 1: Check if PDB already exists
+PROMPT ============================================================
+PROMPT Creating PDB for Windows Oracle XE 21c
+PROMPT ============================================================
 
-SELECT pdb_name, status FROM dba_pdbs WHERE pdb_name = 'GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB';
-
--- Step 2: Create Pluggable Database
-
+-- Create PDB with Windows-style paths
 CREATE PLUGGABLE DATABASE grpD_27453_jockebed_PrisonManagementSystem_db
 ADMIN USER jockebed_admin IDENTIFIED BY Jockebed
-ROLES = (DBA)
-FILE_NAME_CONVERT = ('/pdbseed/', '/grpD_27453_jockebed_PrisonManagementSystem_db/')
-STORAGE (
-    MAXSIZE 10G 
-    MAX_SHARED_TEMP_SIZE 1G
-)
-DEFAULT TABLESPACE users
-DATAFILE '/u01/app/oracle/oradata/grpD_27453_jockebed_PrisonManagementSystem_db/users01.dbf'
-SIZE 100M 
-AUTOEXTEND ON 
-NEXT 10M 
-MAXSIZE 500M
-PATH_PREFIX = '/u01/app/oracle/oradata/grpD_27453_jockebed_PrisonManagementSystem_db/';
+FILE_NAME_CONVERT = (
+    'C:\APP\HP\PRODUCT\21C\ORADATA\XE\PDBSEED\',
+    'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\'
+);
 
--- Step 3: Open the Pluggable Database
-
+PROMPT Opening PDB...
 ALTER PLUGGABLE DATABASE grpD_27453_jockebed_PrisonManagementSystem_db OPEN;
 
--- Step 4: Save state for automatic startup on database restart
-
+PROMPT Saving state...
 ALTER PLUGGABLE DATABASE grpD_27453_jockebed_PrisonManagementSystem_db SAVE STATE;
 
--- Step 5: Verify PDB creation and status
-
-SELECT 
-    pdb_name, 
-    pdb_id, 
-    status, 
-    open_mode, 
-    restricted,
-    open_time
+PROMPT
+PROMPT Verifying PDB...
+SELECT pdb_name, pdb_id, status, open_mode 
 FROM dba_pdbs 
 WHERE pdb_name = 'GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB';
 
--- Step 6: Switch session to the new PDB
-
+PROMPT
+PROMPT Switching to PDB...
 ALTER SESSION SET CONTAINER = grpD_27453_jockebed_PrisonManagementSystem_db;
 
--- Step 7: Verify we're in the correct PDB
-
+PROMPT
+PROMPT Current container:
 SHOW CON_NAME;
-SELECT * FROM V$PDBS WHERE name = 'GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB';
 
--- Step 8: Display PDB details
+PROMPT
+PROMPT Granting DBA privileges to admin user...
+GRANT DBA TO jockebed_admin CONTAINER=CURRENT;
 
-SELECT 
-    name,
-    open_mode,
-    total_size/1024/1024 as total_size_mb
-FROM v$pdbs 
-WHERE name = 'GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB';
+PROMPT
+PROMPT Verifying admin user...
+SELECT username, account_status, created 
+FROM dba_users 
+WHERE username = 'JOCKEBED_ADMIN';
 
+PROMPT
 PROMPT ============================================================
-PROMPT Pluggable Database Created Successfully!
+PROMPT ✅ SUCCESS! Pluggable Database Created
 PROMPT ============================================================
 PROMPT Database Name: grpD_27453_jockebed_PrisonManagementSystem_db
 PROMPT Admin User: jockebed_admin
 PROMPT Admin Password: Jockebed
-PROMPT Status: Open
-PROMPT Auto-start: Enabled
+PROMPT Status: Open and Ready
 PROMPT ============================================================
-PROMPT Next Step: Execute 02_configure_tablespaces.sql
+PROMPT
+PROMPT You are now in the PDB. Run the next scripts:
 PROMPT ============================================================
