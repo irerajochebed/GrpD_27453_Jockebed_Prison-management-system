@@ -1,76 +1,147 @@
 -- ============================================================
--- Prison Management System (PMS)
--- Tablespace Configuration Script
--- Group D | Student ID: 27453 | Name: IRERA Mukawera Jockebed
+-- Tablespace Configuration for 
+-- Prison Management System
 -- ============================================================
-
--- Connect to PDB as admin
--- sqlplus jockebed_admin/Jockebed@grpD_27453_jockebed_PrisonManagementSystem_db
-
--- Set container to PDB (if not already)
-ALTER SESSION SET CONTAINER = grpD_27453_jockebed_PrisonManagementSystem_db;
-
+-- Student: IRERA Mukawera Jockebed | ID: 27453 | Group: D
+-- Database: grpD_27453_jockebed_PrisonManagementSystem_db
 -- ============================================================
--- 1. CREATE DATA TABLESPACE for Prison Management Data
+-- Execute as: sqlplus jockebed_admin/Jockebed@grpD_27453_jockebed_PrisonManagementSystem_db
 -- ============================================================
-CREATE TABLESPACE pms_data
-DATAFILE '/u01/app/oracle/oradata/grpD_27453_jockebed_PrisonManagementSystem_db/pms_data01.dbf'
-SIZE 200M
-AUTOEXTEND ON NEXT 20M MAXSIZE 2G
-EXTENT MANAGEMENT LOCAL
-SEGMENT SPACE MANAGEMENT AUTO
-ONLINE;
-
--- ============================================================
--- 2. CREATE INDEX TABLESPACE for Indexes
--- ============================================================
-CREATE TABLESPACE pms_indexes
-DATAFILE '/u01/app/oracle/oradata/grpD_27453_jockebed_PrisonManagementSystem_db/pms_indexes01.dbf'
-SIZE 100M
-AUTOEXTEND ON NEXT 10M MAXSIZE 1G
-EXTENT MANAGEMENT LOCAL
-SEGMENT SPACE MANAGEMENT AUTO
-ONLINE;
-
--- ============================================================
--- 3. CREATE TEMPORARY TABLESPACE
--- ============================================================
-CREATE TEMPORARY TABLESPACE pms_temp
-TEMPFILE '/u01/app/oracle/oradata/grpD_27453_jockebed_PrisonManagementSystem_db/pms_temp01.dbf'
-SIZE 100M
-AUTOEXTEND ON NEXT 10M MAXSIZE 500M
-EXTENT MANAGEMENT LOCAL;
-
--- ============================================================
--- 4. SET DEFAULT TABLESPACES
--- ============================================================
-ALTER DATABASE DEFAULT TABLESPACE pms_data;
-ALTER DATABASE DEFAULT TEMPORARY TABLESPACE pms_temp;
-
--- ============================================================
--- 5. VERIFY TABLESPACE CREATION
--- ============================================================
-SELECT tablespace_name, status, contents, extent_management, 
-       segment_space_management, block_size
-FROM dba_tablespaces
-WHERE tablespace_name IN ('PMS_DATA', 'PMS_INDEXES', 'PMS_TEMP')
-ORDER BY tablespace_name;
-
--- Check datafile configuration
-SELECT file_name, tablespace_name, bytes/1024/1024 as size_mb, 
-       maxbytes/1024/1024 as max_size_mb, autoextensible
-FROM dba_data_files
-WHERE tablespace_name IN ('PMS_DATA', 'PMS_INDEXES')
-UNION ALL
-SELECT file_name, tablespace_name, bytes/1024/1024 as size_mb,
-       maxbytes/1024/1024 as max_size_mb, autoextensible
-FROM dba_temp_files
-WHERE tablespace_name = 'PMS_TEMP'
-ORDER BY tablespace_name;
 
 PROMPT ============================================================
-PROMPT Tablespaces Configured Successfully!
-PROMPT - Data Tablespace: pms_data (200MB, max 2GB)
-PROMPT - Index Tablespace: pms_indexes (100MB, max 1GB)
-PROMPT - Temporary Tablespace: pms_temp (100MB, max 500MB)
+PROMPT Configuring Tablespaces for Prison Management System
+PROMPT ============================================================
+
+-- Ensure we're in the correct PDB
+ALTER SESSION SET CONTAINER = grpD_27453_jockebed_PrisonManagementSystem_db;
+
+PROMPT
+PROMPT Creating Data Tablespace (PRISON_DATA_TBS)...
+PROMPT ============================================================
+
+CREATE TABLESPACE PRISON_DATA_TBS
+DATAFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\prison_data_01.dbf'
+SIZE 100M
+AUTOEXTEND ON 
+NEXT 10M 
+MAXSIZE 2G
+EXTENT MANAGEMENT LOCAL AUTOALLOCATE
+SEGMENT SPACE MANAGEMENT AUTO
+ONLINE;
+
+PROMPT ✅ Data tablespace created successfully!
+PROMPT
+
+PROMPT Creating Index Tablespace (PRISON_INDEX_TBS)...
+PROMPT ============================================================
+
+CREATE TABLESPACE PRISON_INDEX_TBS
+DATAFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\prison_index_01.dbf'
+SIZE 50M
+AUTOEXTEND ON 
+NEXT 5M 
+MAXSIZE 1G
+EXTENT MANAGEMENT LOCAL AUTOALLOCATE
+SEGMENT SPACE MANAGEMENT AUTO
+ONLINE;
+
+PROMPT ✅ Index tablespace created successfully!
+PROMPT
+
+PROMPT Creating Temporary Tablespace (PRISON_TEMP_TBS)...
+PROMPT ============================================================
+
+CREATE TEMPORARY TABLESPACE PRISON_TEMP_TBS
+TEMPFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\prison_temp_01.dbf'
+SIZE 50M
+AUTOEXTEND ON 
+NEXT 5M 
+MAXSIZE 500M
+EXTENT MANAGEMENT LOCAL UNIFORM SIZE 1M;
+
+PROMPT ✅ Temporary tablespace created successfully!
+PROMPT
+
+PROMPT Creating LOB Tablespace for Documents (PRISON_LOB_TBS)...
+PROMPT ============================================================
+
+CREATE TABLESPACE PRISON_LOB_TBS
+DATAFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\prison_lob_01.dbf'
+SIZE 50M
+AUTOEXTEND ON 
+NEXT 10M 
+MAXSIZE 1G
+EXTENT MANAGEMENT LOCAL AUTOALLOCATE
+SEGMENT SPACE MANAGEMENT AUTO
+ONLINE;
+
+PROMPT ✅ LOB tablespace created successfully!
+PROMPT
+
+PROMPT Verifying Tablespaces...
+PROMPT ============================================================
+
+SELECT 
+    tablespace_name,
+    status,
+    contents,
+    ROUND(bytes/1024/1024, 2) AS size_mb,
+    ROUND(maxbytes/1024/1024, 2) AS max_size_mb,
+    autoextensible
+FROM dba_data_files
+WHERE tablespace_name LIKE 'PRISON%'
+UNION ALL
+SELECT 
+    tablespace_name,
+    status,
+    contents,
+    ROUND(bytes/1024/1024, 2) AS size_mb,
+    ROUND(maxbytes/1024/1024, 2) AS max_size_mb,
+    autoextensible
+FROM dba_temp_files
+WHERE tablespace_name LIKE 'PRISON%'
+ORDER BY tablespace_name;
+
+PROMPT
+PROMPT Tablespace Summary:
+PROMPT ============================================================
+
+SELECT 
+    tablespace_name,
+    status,
+    contents,
+    COUNT(*) as file_count
+FROM dba_tablespaces
+WHERE tablespace_name LIKE 'PRISON%'
+GROUP BY tablespace_name, status, contents
+ORDER BY tablespace_name;
+
+PROMPT
+PROMPT Setting Default Tablespaces for Admin User...
+PROMPT ============================================================
+
+ALTER USER jockebed_admin 
+    DEFAULT TABLESPACE PRISON_DATA_TBS
+    TEMPORARY TABLESPACE PRISON_TEMP_TBS
+    QUOTA UNLIMITED ON PRISON_DATA_TBS
+    QUOTA UNLIMITED ON PRISON_INDEX_TBS
+    QUOTA UNLIMITED ON PRISON_LOB_TBS;
+
+PROMPT ✅ Default tablespaces set for admin user!
+PROMPT
+
+PROMPT ============================================================
+PROMPT ✅ SUCCESS! Tablespace Configuration Complete
+PROMPT ============================================================
+PROMPT
+PROMPT Tablespaces Created:
+PROMPT   1. PRISON_DATA_TBS   - Main data storage (100MB -> 2GB)
+PROMPT   2. PRISON_INDEX_TBS  - Index storage (50MB -> 1GB)
+PROMPT   3. PRISON_TEMP_TBS   - Temporary operations (50MB -> 500MB)
+PROMPT   4. PRISON_LOB_TBS    - Document storage (50MB -> 1GB)
+PROMPT
+PROMPT All tablespaces have AUTOEXTEND enabled
+PROMPT ============================================================
+PROMPT
+PROMPT Next Step: Run @03_configure_memory_archive.sql
 PROMPT ============================================================
