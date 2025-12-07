@@ -73,7 +73,12 @@ Execute the database creation script:
 ```
 
 **What this does:**
-- Creates the pluggable database `grpD_27453_jockebed_PrisonManagementSystem_db`(CREATE PLUGGABLE DATABASE grpD_27453_jockebed_PrisonManagementSystem_db
+- Creates the pluggable database `grpD_27453_jockebed_PrisonManagementSystem_db`
+
+  ```sql
+  CREATE PLUGGABLE DATABASE grpD_27453_jockebed_PrisonManagementSystem_db
+  ```
+  
 ADMIN USER jockebed_admin IDENTIFIED BY Jockebed;)
 - Creates admin user `jockebed_admin` with password `Jockebed`
 - Configures initial storage parameters
@@ -99,15 +104,15 @@ Execute the tablespace configuration:
 - Creates `pms_temp` temporary tablespace (100MB, autoextend to 500MB)
 - Sets default tablespaces
 
-  ---sql
-    CREATE TABLESPACE pms_data
-    DATAFILE '/u01/app/oracle/oradata/grpD_27453_jockebed_PrisonManagementSystem_db/pms_data01.dbf'
-    SIZE 200M
-    AUTOEXTEND ON NEXT 20M MAXSIZE 2G
-    EXTENT MANAGEMENT LOCAL
-    SEGMENT SPACE MANAGEMENT AUTO
-    ONLINE;
- ---
+ ```sql
+CREATE TABLESPACE pms_data
+DATAFILE '/u01/app/oracle/oradata/grpD_27453_jockebed_PrisonManagementSystem_db/pms_data01.dbf'
+SIZE 200M
+AUTOEXTEND ON NEXT 20M MAXSIZE 2G
+EXTENT MANAGEMENT LOCAL
+SEGMENT SPACE MANAGEMENT AUTO
+ONLINE;
+```
 
 ### Step 3: Configure Memory & Archive Logging
 
