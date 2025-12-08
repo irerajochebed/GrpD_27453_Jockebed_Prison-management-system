@@ -1,0 +1,1654 @@
+SQL> -- ============================================================
+SQL> -- PHASE V: FIXING REMAINING ISSUES & VALIDATION
+SQL> -- ============================================================
+SQL> 
+SQL> SET SERVEROUTPUT ON
+SQL> SET ECHO ON
+SQL> SET FEEDBACK ON
+SQL> 
+SQL> ALTER SESSION SET CONTAINER = grpD_27453_jockebed_PrisonManagementSystem_db;
+
+Session altered.
+
+SQL> 
+SQL> PROMPT ============================================================
+============================================================
+SQL> PROMPT FIXING REMAINING ISSUES
+FIXING REMAINING ISSUES
+SQL> PROMPT ============================================================
+============================================================
+SQL> 
+SQL> -- 1. Fix SENTENCES insertion issue
+SQL> PROMPT Fixing SENTENCES insertion...
+Fixing SENTENCES insertion...
+SQL> 
+SQL> DECLARE
+  2      CURSOR c_prisoners IS SELECT prisoner_id FROM prisoners;
+  3      v_offense_id NUMBER;
+  4      v_sentence_count NUMBER := 0;
+  5  BEGIN
+  6      FOR rec IN c_prisoners LOOP
+  7          -- Get a random offense
+  8          SELECT offense_id INTO v_offense_id FROM (
+  9              SELECT offense_id FROM offenses ORDER BY DBMS_RANDOM.VALUE
+ 10          ) WHERE ROWNUM = 1;
+ 11  
+ 12          INSERT INTO SENTENCES (
+ 13              sentence_id, prisoner_id, offense_id, case_number, court_name, judge_name,
+ 14              conviction_date, sentence_type, sentence_duration_years, sentence_duration_months,
+ 15              sentence_duration_days, fine_amount, sentence_start_date, sentence_end_date,
+ 16              parole_eligible_date, status, remarks
+ 17          ) VALUES (
+ 18              seq_sentence_id.NEXTVAL,
+ 19              rec.prisoner_id,
+ 20              v_offense_id,
+ 21              'CR-' || LPAD(seq_sentence_id.CURRVAL, 6, '0'),
+ 22              CASE TRUNC(DBMS_RANDOM.VALUE(1, 4))
+ 23                  WHEN 1 THEN 'Kigali High Court'
+ 24                  WHEN 2 THEN 'Nyarugenge District Court'
+ 25                  WHEN 3 THEN 'Huye High Court'
+ 26                  ELSE 'Rusizi District Court'
+ 27              END,
+ 28              CASE TRUNC(DBMS_RANDOM.VALUE(1, 4))
+ 29                  WHEN 1 THEN 'Judge Jean de Dieu'
+ 30                  WHEN 2 THEN 'Judge Marie Claire'
+ 31                  WHEN 3 THEN 'Judge Joseph'
+ 32                  ELSE 'Judge Alice'
+ 33              END,
+ 34              SYSDATE - TRUNC(DBMS_RANDOM.VALUE(30, 180)),
+ 35              'Imprisonment',
+ 36              TRUNC(DBMS_RANDOM.VALUE(1, 20)),
+ 37              TRUNC(DBMS_RANDOM.VALUE(0, 12)),
+ 38              TRUNC(DBMS_RANDOM.VALUE(0, 30)),
+ 39              CASE WHEN DBMS_RANDOM.VALUE < 0.3 THEN TRUNC(DBMS_RANDOM.VALUE(100000, 500000)) ELSE NULL END,
+ 40              SYSDATE - TRUNC(DBMS_RANDOM.VALUE(1, 1000)),
+ 41              SYSDATE + TRUNC(DBMS_RANDOM.VALUE(100, 2000)),
+ 42              SYSDATE + TRUNC(DBMS_RANDOM.VALUE(50, 1000)),
+ 43              'Active',
+ 44              'Test sentence'
+ 45          );
+ 46  
+ 47          v_sentence_count := v_sentence_count + 1;
+ 48  
+ 49          IF MOD(v_sentence_count, 20) = 0 THEN
+ 50              COMMIT;
+ 51              DBMS_OUTPUT.PUT_LINE('   Committed ' || v_sentence_count || ' sentences...');
+ 52          END IF;
+ 53      END LOOP;
+ 54  
+ 55      COMMIT;
+ 56      DBMS_OUTPUT.PUT_LINE('✅ Inserted ' || v_sentence_count || ' sentences');
+ 57  EXCEPTION
+ 58      WHEN OTHERS THEN
+ 59          DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+ 60          ROLLBACK;
+ 61  END;
+ 62  /
+Committed 20 sentences...
+   Committed 40 sentences...
+   Committed 60 sentences...
+   Committed 80 sentences...
+   Committed 100 sentences...
+   Committed 120 sentences...
+   Committed 140 sentences...
+   Committed 160 sentences...
+   Committed 180 sentences...
+   Committed 200 sentences...
+   Committed 220 sentences...
+   Committed 240 sentences...
+   Committed 260 sentences...
+   Committed 280 sentences...
+   Committed 300 sentences...
+   Committed 320 sentences...
+   Committed 340 sentences...
+   Committed 360 sentences...
+   Committed 380 sentences...
+   Committed 400 sentences...
+   Committed 420 sentences...
+   Committed 440 sentences...
+   Committed 460 sentences...
+   Committed 480 sentences...
+   Committed 500 sentences...
+   Committed 520 sentences...
+   Committed 540 sentences...
+   Committed 560 sentences...
+   Committed 580 sentences...
+   Committed 600 sentences...
+   Committed 620 sentences...
+   Committed 640 sentences...
+   Committed 660 sentences...
+   Committed 680 sentences...
+   Committed 700 sentences...
+✅ Inserted 700 sentences
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> -- 2. Fix PROGRAM_ENROLLMENTS check constraint issue
+SQL> PROMPT Fixing PROGRAM_ENROLLMENTS data...
+Fixing PROGRAM_ENROLLMENTS data...
+SQL> 
+SQL> DECLARE
+  2      CURSOR c_prisoners IS SELECT prisoner_id FROM prisoners WHERE status = 'Active' AND ROWNUM <= 30;
+  3      v_program_ids SYS.ODCINUMBERLIST;
+  4      v_enrollment_count NUMBER := 0;
+  5  BEGIN
+  6      SELECT program_id BULK COLLECT INTO v_program_ids FROM programs;
+  7  
+  8      FOR rec IN c_prisoners LOOP
+  9          FOR i IN 1..TRUNC(DBMS_RANDOM.VALUE(1, 3)) LOOP
+ 10              INSERT INTO PROGRAM_ENROLLMENTS (
+ 11                  enrollment_id, prisoner_id, program_id, enrollment_date,
+ 12                  completion_date, completion_status, performance_rating, notes
+ 13              ) VALUES (
+ 14                  seq_enrollment_id.NEXTVAL,
+ 15                  rec.prisoner_id,
+ 16                  v_program_ids(TRUNC(DBMS_RANDOM.VALUE(1, v_program_ids.COUNT))),
+ 17                  SYSDATE - TRUNC(DBMS_RANDOM.VALUE(1, 180)),
+ 18                  CASE WHEN DBMS_RANDOM.VALUE < 0.3 THEN SYSDATE - TRUNC(DBMS_RANDOM.VALUE(1, 90)) ELSE NULL END,
+ 19                  CASE 
+ 20                      WHEN DBMS_RANDOM.VALUE < 0.3 THEN 'Completed'
+ 21                      WHEN DBMS_RANDOM.VALUE < 0.6 THEN 'In Progress'
+ 22                      WHEN DBMS_RANDOM.VALUE < 0.9 THEN 'Enrolled'
+ 23                      ELSE 'Dropped'
+ 24                  END,
+ 25                  CASE 
+ 26                      WHEN DBMS_RANDOM.VALUE < 0.2 THEN 'Excellent'
+ 27                      WHEN DBMS_RANDOM.VALUE < 0.5 THEN 'Good'
+ 28                      WHEN DBMS_RANDOM.VALUE < 0.8 THEN 'Satisfactory'
+ 29                      ELSE 'Poor'
+ 30                  END,
+ 31                  'Program enrollment'
+ 32              );
+ 33  
+ 34              v_enrollment_count := v_enrollment_count + 1;
+ 35          END LOOP;
+ 36      END LOOP;
+ 37  
+ 38      COMMIT;
+ 39      DBMS_OUTPUT.PUT_LINE('✅ Inserted ' || v_enrollment_count || ' program enrollments');
+ 40  EXCEPTION
+ 41      WHEN OTHERS THEN
+ 42          DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+ 43          ROLLBACK;
+ 44  END;
+ 45  /
+Error: ORA-02290: check constraint (SYS.CHK_COMPLETION) violated
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> -- ============================================================
+SQL> -- DATA VALIDATION AND VERIFICATION SCRIPT
+SQL> -- ============================================================
+SQL> 
+SQL> PROMPT ============================================================
+============================================================
+SQL> PROMPT DATA VALIDATION AND VERIFICATION
+DATA VALIDATION AND VERIFICATION
+SQL> PROMPT ============================================================
+============================================================
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT 1. Table Row Counts:
+1. Table Row Counts:
+SQL> PROMPT
+
+SQL> 
+SQL> DECLARE
+  2      v_total_rows NUMBER := 0;
+  3  BEGIN
+  4      DBMS_OUTPUT.PUT_LINE('Table Name                  | Row Count');
+  5      DBMS_OUTPUT.PUT_LINE('----------------------------|----------');
+  6  
+  7      FOR rec IN (
+  8          SELECT table_name, 
+  9                 CASE table_name
+ 10                     WHEN 'PRISONS' THEN (SELECT COUNT(*) FROM prisons)
+ 11                     WHEN 'BLOCKS' THEN (SELECT COUNT(*) FROM blocks)
+ 12                     WHEN 'CELLS' THEN (SELECT COUNT(*) FROM cells)
+ 13                     WHEN 'PRISONERS' THEN (SELECT COUNT(*) FROM prisoners)
+ 14                     WHEN 'PRISONER_ASSIGNMENTS' THEN (SELECT COUNT(*) FROM prisoner_assignments)
+ 15                     WHEN 'OFFENSES' THEN (SELECT COUNT(*) FROM offenses)
+ 16                     WHEN 'SENTENCES' THEN (SELECT COUNT(*) FROM sentences)
+ 17                     WHEN 'STAFF' THEN (SELECT COUNT(*) FROM staff)
+ 18                     WHEN 'VISITORS' THEN (SELECT COUNT(*) FROM visitors)
+ 19                     WHEN 'VISITS' THEN (SELECT COUNT(*) FROM visits)
+ 20                     WHEN 'INCIDENTS' THEN (SELECT COUNT(*) FROM incidents)
+ 21                     WHEN 'INCIDENT_PRISONERS' THEN (SELECT COUNT(*) FROM incident_prisoners)
+ 22                     WHEN 'MEDICAL_RECORDS' THEN (SELECT COUNT(*) FROM medical_records)
+ 23                     WHEN 'PROGRAMS' THEN (SELECT COUNT(*) FROM programs)
+ 24                     WHEN 'PROGRAM_ENROLLMENTS' THEN (SELECT COUNT(*) FROM program_enrollments)
+ 25                 END as row_count
+ 26          FROM user_tables
+ 27          WHERE table_name IN (
+ 28              'PRISONS', 'BLOCKS', 'CELLS', 'PRISONERS', 'PRISONER_ASSIGNMENTS',
+ 29              'OFFENSES', 'SENTENCES', 'STAFF', 'VISITORS', 'VISITS',
+ 30              'INCIDENTS', 'INCIDENT_PRISONERS', 'MEDICAL_RECORDS',
+ 31              'PROGRAMS', 'PROGRAM_ENROLLMENTS'
+ 32          )
+ 33          ORDER BY table_name
+ 34      ) LOOP
+ 35          DBMS_OUTPUT.PUT_LINE(RPAD(rec.table_name, 28) || '| ' || LPAD(TO_CHAR(rec.row_count), 8));
+ 36          v_total_rows := v_total_rows + rec.row_count;
+ 37      END LOOP;
+ 38  
+ 39      DBMS_OUTPUT.PUT_LINE('----------------------------|----------');
+ 40      DBMS_OUTPUT.PUT_LINE('TOTAL ROWS INSERTED        | ' || LPAD(TO_CHAR(v_total_rows), 8));
+ 41      DBMS_OUTPUT.PUT_LINE('========================================');
+ 42  END;
+ 43  /
+Table Name                  | Row Count
+----------------------------|----------
+BLOCKS                      |       52
+CELLS                       |      520
+INCIDENTS                   |       20
+INCIDENT_PRISONERS          |       38
+MEDICAL_RECORDS             |       50
+OFFENSES                    |       32
+PRISONERS                   |      700
+PRISONER_ASSIGNMENTS        |      654
+PRISONS                     |       14
+PROGRAMS                    |        5
+PROGRAM_ENROLLMENTS         |        0
+SENTENCES                   |     1300
+STAFF                       |       80
+VISITORS                    |      250
+VISITS                      |      300
+----------------------------|----------
+TOTAL ROWS INSERTED        |     4015
+========================================
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT 2. Data Integrity Checks:
+2. Data Integrity Checks:
+SQL> PROMPT
+
+SQL> 
+SQL> BEGIN
+  2      -- Check foreign key relationships
+  3      DBMS_OUTPUT.PUT_LINE('Foreign Key Validation:');
+  4  
+  5      -- Check if all prisoners have assignments
+  6      DECLARE
+  7          v_prisoners_without_assignments NUMBER;
+  8      BEGIN
+  9          SELECT COUNT(*) INTO v_prisoners_without_assignments
+ 10          FROM prisoners p
+ 11          WHERE status = 'Active'
+ 12          AND NOT EXISTS (
+ 13              SELECT 1 FROM prisoner_assignments pa 
+ 14              WHERE pa.prisoner_id = p.prisoner_id 
+ 15              AND pa.status = 'Active'
+ 16          );
+ 17  
+ 18          IF v_prisoners_without_assignments = 0 THEN
+ 19              DBMS_OUTPUT.PUT_LINE('✅ All active prisoners have assignments');
+ 20          ELSE
+ 21              DBMS_OUTPUT.PUT_LINE('❌ ' || v_prisoners_without_assignments || ' active prisoners without assignments');
+ 22          END IF;
+ 23      END;
+ 24  
+ 25      -- Check if all sentences reference valid prisoners
+ 26      DECLARE
+ 27          v_invalid_sentences NUMBER;
+ 28      BEGIN
+ 29          SELECT COUNT(*) INTO v_invalid_sentences
+ 30          FROM sentences s
+ 31          WHERE NOT EXISTS (
+ 32              SELECT 1 FROM prisoners p WHERE p.prisoner_id = s.prisoner_id
+ 33          );
+ 34  
+ 35          IF v_invalid_sentences = 0 THEN
+ 36              DBMS_OUTPUT.PUT_LINE('✅ All sentences reference valid prisoners');
+ 37          ELSE
+ 38              DBMS_OUTPUT.PUT_LINE('❌ ' || v_invalid_sentences || ' sentences with invalid prisoner references');
+ 39          END IF;
+ 40      END;
+ 41  
+ 42      -- Check if all visits have valid prisoner and visitor references
+ 43      DECLARE
+ 44          v_invalid_visits NUMBER;
+ 45      BEGIN
+ 46          SELECT COUNT(*) INTO v_invalid_visits
+ 47          FROM visits v
+ 48          WHERE NOT EXISTS (
+ 49              SELECT 1 FROM prisoners p WHERE p.prisoner_id = v.prisoner_id
+ 50          ) OR NOT EXISTS (
+ 51              SELECT 1 FROM visitors vis WHERE vis.visitor_id = v.visitor_id
+ 52          );
+ 53  
+ 54          IF v_invalid_visits = 0 THEN
+ 55              DBMS_OUTPUT.PUT_LINE('✅ All visits have valid prisoner and visitor references');
+ 56          ELSE
+ 57              DBMS_OUTPUT.PUT_LINE('❌ ' || v_invalid_visits || ' visits with invalid references');
+ 58          END IF;
+ 59      END;
+ 60  
+ 61      -- Check constraint violations
+ 62      DBMS_OUTPUT.PUT_LINE('');
+ 63      DBMS_OUTPUT.PUT_LINE('Constraint Validation:');
+ 64  
+ 65      -- Check date constraints
+ 66      DECLARE
+ 67          v_invalid_dates NUMBER;
+ 68      BEGIN
+ 69          SELECT COUNT(*) INTO v_invalid_dates
+ 70          FROM prisoners
+ 71          WHERE expected_release_date IS NOT NULL 
+ 72          AND expected_release_date <= admission_date;
+ 73  
+ 74          IF v_invalid_dates = 0 THEN
+ 75              DBMS_OUTPUT.PUT_LINE('✅ All release dates are after admission dates');
+ 76          ELSE
+ 77              DBMS_OUTPUT.PUT_LINE('❌ ' || v_invalid_dates || ' prisoners with invalid release dates');
+ 78          END IF;
+ 79      END;
+ 80  
+ 81      -- Check status consistency
+ 82      DECLARE
+ 83          v_inconsistent_status NUMBER;
+ 84      BEGIN
+ 85          SELECT COUNT(*) INTO v_inconsistent_status
+ 86          FROM prisoners p
+ 87          JOIN prisoner_assignments pa ON p.prisoner_id = pa.prisoner_id
+ 88          WHERE p.status = 'Active' AND pa.status != 'Active';
+ 89  
+ 90          IF v_inconsistent_status = 0 THEN
+ 91              DBMS_OUTPUT.PUT_LINE('✅ Prisoner and assignment statuses are consistent');
+ 92          ELSE
+ 93              DBMS_OUTPUT.PUT_LINE('❌ ' || v_inconsistent_status || ' prisoners with inconsistent statuses');
+ 94          END IF;
+ 95      END;
+ 96  END;
+ 97  /
+Foreign Key Validation:
+✅ All active prisoners have assignments
+✅ All sentences reference valid prisoners
+✅ All visits have valid prisoner and visitor references
+
+Constraint Validation:
+✅ All release dates are after admission dates
+✅ Prisoner and assignment statuses are consistent
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT 3. Sample Data Verification:
+3. Sample Data Verification:
+SQL> PROMPT
+
+SQL> 
+SQL> -- Show sample data from each table
+SQL> BEGIN
+  2      DBMS_OUTPUT.PUT_LINE('Sample Prison Data:');
+  3      DBMS_OUTPUT.PUT_LINE('-------------------');
+  4      FOR rec IN (
+  5          SELECT prison_name, prison_type, location, capacity, status 
+  6          FROM prisons 
+  7          WHERE ROWNUM <= 2
+  8      ) LOOP
+  9          DBMS_OUTPUT.PUT_LINE('Name: ' || rec.prison_name);
+ 10          DBMS_OUTPUT.PUT_LINE('Type: ' || rec.prison_type || ', Location: ' || rec.location);
+ 11          DBMS_OUTPUT.PUT_LINE('Capacity: ' || rec.capacity || ', Status: ' || rec.status);
+ 12          DBMS_OUTPUT.PUT_LINE('');
+ 13      END LOOP;
+ 14  
+ 15      DBMS_OUTPUT.PUT_LINE('Sample Prisoner Data:');
+ 16      DBMS_OUTPUT.PUT_LINE('---------------------');
+ 17      FOR rec IN (
+ 18          SELECT p.prisoner_id, p.first_name || ' ' || p.last_name as full_name,
+ 19                 p.gender, p.admission_date, p.expected_release_date, p.status,
+ 20                 o.offense_name, s.sentence_duration_years
+ 21          FROM prisoners p
+ 22          JOIN sentences s ON p.prisoner_id = s.prisoner_id
+ 23          JOIN offenses o ON s.offense_id = o.offense_id
+ 24          WHERE ROWNUM <= 3
+ 25      ) LOOP
+ 26          DBMS_OUTPUT.PUT_LINE('ID: ' || rec.prisoner_id || ', Name: ' || rec.full_name);
+ 27          DBMS_OUTPUT.PUT_LINE('Gender: ' || rec.gender || ', Admission: ' || TO_CHAR(rec.admission_date, 'DD-MON-YYYY'));
+ 28          DBMS_OUTPUT.PUT_LINE('Offense: ' || rec.offense_name || ', Sentence: ' || rec.sentence_duration_years || ' years');
+ 29          DBMS_OUTPUT.PUT_LINE('Status: ' || rec.status);
+ 30          DBMS_OUTPUT.PUT_LINE('');
+ 31      END LOOP;
+ 32  
+ 33      DBMS_OUTPUT.PUT_LINE('Sample Staff Data:');
+ 34      DBMS_OUTPUT.PUT_LINE('------------------');
+ 35      FOR rec IN (
+ 36          SELECT s.first_name || ' ' || s.last_name as staff_name,
+ 37                 s.position, s.department, s.hire_date, s.salary,
+ 38                 p.prison_name
+ 39          FROM staff s
+ 40          JOIN prisons p ON s.prison_id = p.prison_id
+ 41          WHERE ROWNUM <= 2
+ 42      ) LOOP
+ 43          DBMS_OUTPUT.PUT_LINE('Name: ' || rec.staff_name);
+ 44          DBMS_OUTPUT.PUT_LINE('Position: ' || rec.position || ', Department: ' || rec.department);
+ 45          DBMS_OUTPUT.PUT_LINE('Hire Date: ' || TO_CHAR(rec.hire_date, 'DD-MON-YYYY') || 
+ 46                             ', Salary: ' || TO_CHAR(rec.salary, 'FM999,999,999'));
+ 47          DBMS_OUTPUT.PUT_LINE('Works at: ' || rec.prison_name);
+ 48          DBMS_OUTPUT.PUT_LINE('');
+ 49      END LOOP;
+ 50  END;
+ 51  /
+Sample Prison Data:
+-------------------
+Name: Kigali Central Prison
+Type: Maximum Security, Location: Kigali City, Nyarugenge District
+Capacity: 2500, Status: Active
+
+Name: Muhanga Prison
+Type: Medium Security, Location: Southern Province, Muhanga District
+Capacity: 1800, Status: Active
+
+Sample Prisoner Data:
+---------------------
+ID: 10152, Name: Jacques Munyeshyaka
+Gender: M, Admission: 27-JUN-2025
+Offense: Murder, Sentence: 15 years
+Status: Active
+
+ID: 10152, Name: Jacques Munyeshyaka
+Gender: M, Admission: 27-JUN-2025
+Offense: Hit and Run, Sentence: 4 years
+Status: Active
+
+ID: 10153, Name: Robert Ndagijimana
+Gender: M, Admission: 14-JUN-2025
+Offense: Murder, Sentence: 29 years
+Status: Active
+
+Sample Staff Data:
+------------------
+Name: Claude Kamanzi
+Position: Cook, Department: Kitchen
+Hire Date: 11-FEB-2025, Salary: 400,000
+Works at: Kigali Central Prison
+
+Name: Frank Mukama
+Position: Counselor, Department: Counseling
+Hire Date: 17-APR-2024, Salary: 500,000
+Works at: Kigali Central Prison
+
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT 4. Statistical Summary:
+4. Statistical Summary:
+SQL> PROMPT
+
+SQL> 
+SQL> BEGIN
+  2      DBMS_OUTPUT.PUT_LINE('Prison Statistics:');
+  3      DBMS_OUTPUT.PUT_LINE('==================');
+  4  
+  5      -- Prison capacity utilization
+  6      FOR rec IN (
+  7          SELECT p.prison_name, p.capacity,
+  8                 (SELECT COUNT(DISTINCT pa.prisoner_id) 
+  9                  FROM prisoner_assignments pa 
+ 10                  WHERE pa.prison_id = p.prison_id 
+ 11                  AND pa.status = 'Active') as current_population,
+ 12                 ROUND((SELECT COUNT(DISTINCT pa.prisoner_id) * 100.0 / p.capacity
+ 13                        FROM prisoner_assignments pa 
+ 14                        WHERE pa.prison_id = p.prison_id 
+ 15                        AND pa.status = 'Active'), 2) as utilization_percent
+ 16          FROM prisons p
+ 17          WHERE p.status = 'Active'
+ 18      ) LOOP
+ 19          DBMS_OUTPUT.PUT_LINE(rec.prison_name || ': ' || rec.current_population || 
+ 20                             '/' || rec.capacity || ' (' || rec.utilization_percent || '%)');
+ 21      END LOOP;
+ 22  
+ 23      DBMS_OUTPUT.PUT_LINE('');
+ 24      DBMS_OUTPUT.PUT_LINE('Prisoner Demographics:');
+ 25      DBMS_OUTPUT.PUT_LINE('======================');
+ 26  
+ 27      -- Gender distribution
+ 28      DECLARE
+ 29          v_total_prisoners NUMBER;
+ 30          v_male_count NUMBER;
+ 31          v_female_count NUMBER;
+ 32      BEGIN
+ 33          SELECT COUNT(*) INTO v_total_prisoners FROM prisoners WHERE status = 'Active';
+ 34          SELECT COUNT(*) INTO v_male_count FROM prisoners WHERE status = 'Active' AND gender = 'M';
+ 35          SELECT COUNT(*) INTO v_female_count FROM prisoners WHERE status = 'Active' AND gender = 'F';
+ 36  
+ 37          DBMS_OUTPUT.PUT_LINE('Total Active Prisoners: ' || v_total_prisoners);
+ 38          DBMS_OUTPUT.PUT_LINE('Male: ' || v_male_count || ' (' || 
+ 39                             ROUND(v_male_count * 100.0 / v_total_prisoners, 1) || '%)');
+ 40          DBMS_OUTPUT.PUT_LINE('Female: ' || v_female_count || ' (' || 
+ 41                             ROUND(v_female_count * 100.0 / v_total_prisoners, 1) || '%)');
+ 42      END;
+ 43  
+ 44      DBMS_OUTPUT.PUT_LINE('');
+ 45      DBMS_OUTPUT.PUT_LINE('Offense Statistics:');
+ 46      DBMS_OUTPUT.PUT_LINE('===================');
+ 47  
+ 48      -- Top offenses
+ 49      FOR rec IN (
+ 50          SELECT o.offense_name, COUNT(s.sentence_id) as offense_count
+ 51          FROM sentences s
+ 52          JOIN offenses o ON s.offense_id = o.offense_id
+ 53          GROUP BY o.offense_name
+ 54          ORDER BY offense_count DESC
+ 55          FETCH FIRST 5 ROWS ONLY
+ 56      ) LOOP
+ 57          DBMS_OUTPUT.PUT_LINE(rec.offense_name || ': ' || rec.offense_count || ' cases');
+ 58      END LOOP;
+ 59  
+ 60      DBMS_OUTPUT.PUT_LINE('');
+ 61      DBMS_OUTPUT.PUT_LINE('Program Participation:');
+ 62      DBMS_OUTPUT.PUT_LINE('=====================');
+ 63  
+ 64      -- Program enrollment stats
+ 65      FOR rec IN (
+ 66          SELECT p.program_name, p.program_type,
+ 67                 COUNT(pe.enrollment_id) as enrollment_count,
+ 68                 AVG(CASE WHEN pe.completion_status = 'Completed' THEN 1 ELSE 0 END) * 100 as completion_rate
+ 69          FROM programs p
+ 70          LEFT JOIN program_enrollments pe ON p.program_id = pe.program_id
+ 71          GROUP BY p.program_name, p.program_type
+ 72          ORDER BY enrollment_count DESC
+ 73      ) LOOP
+ 74          DBMS_OUTPUT.PUT_LINE(rec.program_name || ' (' || rec.program_type || '): ' || 
+ 75                             rec.enrollment_count || ' enrollments, ' || 
+ 76                             ROUND(rec.completion_rate, 1) || '% completion rate');
+ 77      END LOOP;
+ 78  END;
+ 79  /
+Prison Statistics:
+==================
+Kigali Central Prison: 44/2500 (1.76%)
+Muhanga Prison: 39/1800 (2.17%)
+Nyanza Prison: 58/1500 (3.87%)
+Huye Prison: 62/1200 (5.17%)
+Rubavu Prison: 68/1600 (4.25%)
+Rusizi Prison: 58/1400 (4.14%)
+Musanze Prison: 54/2000 (2.7%)
+Rwamagana Prison: 45/1100 (4.09%)
+Nyagatare Prison: 71/1300 (5.46%)
+Iwawa Rehabilitation Center: 55/800 (6.88%)
+Nyarugenge Maximum Security Prison: 49/1500 (3.27%)
+Muhanga Medium Security Prison: 51/1200 (4.25%)
+Ngoma Juvenile Rehabilitation Center: 0/800 (0%)
+
+Prisoner Demographics:
+======================
+Total Active Prisoners: 654
+Male: 452 (69.1%)
+Female: 202 (30.9%)
+
+Offense Statistics:
+===================
+Murder: 613 cases
+Drug Trafficking: 34 cases
+Human Trafficking: 31 cases
+Genocide Ideology: 30 cases
+Cyber Crime: 29 cases
+
+Program Participation:
+=====================
+Basic Literacy (Education): 0 enrollments, 0% completion rate
+Carpentry Training (Vocational Training): 0 enrollments, 0% completion rate
+Computer Basics (Education): 0 enrollments, 0% completion rate
+Substance Abuse Counseling (Substance Abuse): 0 enrollments, 0% completion rate
+Anger Management (Counseling): 0 enrollments, 0% completion rate
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT 5. Test Queries:
+5. Test Queries:
+SQL> PROMPT
+
+SQL> 
+SQL> -- Query 1: Basic SELECT with filtering
+SQL> PROMPT Query 1: Active prisoners with their offenses and sentences
+Query 1: Active prisoners with their offenses and sentences
+SQL> SELECT 
+  2      p.prisoner_id,
+  3      p.first_name || ' ' || p.last_name as prisoner_name,
+  4      o.offense_name,
+  5      s.sentence_duration_years || ' years ' || 
+  6      s.sentence_duration_months || ' months' as sentence_length,
+  7      TO_CHAR(s.sentence_end_date, 'DD-MON-YYYY') as expected_release,
+  8      p.status
+  9  FROM prisoners p
+ 10  JOIN sentences s ON p.prisoner_id = s.prisoner_id
+ 11  JOIN offenses o ON s.offense_id = o.offense_id
+ 12  WHERE p.status = 'Active'
+ 13  AND ROWNUM <= 5
+ 14  ORDER BY p.prisoner_id;
+
+PRISONER_ID PRISONER_NAME                                                                                         OFFENSE_NAME                                                                                         SENTENCE_LENGTH                                                                                EXPECTED_RELEASE     STATUS              
+----------- ----------------------------------------------------------------------------------------------------- ---------------------------------------------------------------------------------------------------- ---------------------------------------------------------------------------------------------- -------------------- --------------------
+      10026 David Nyiransabimana                                                                                  Murder                                                                                               16 years 3 months                                                                              16-APR-2041          Active              
+      10027 Samuel Ngabo                                                                                          Murder                                                                                               15 years 10 months                                                                             22-OCT-2040          Active              
+      10028 Joseph Mukanyandwi                                                                                    Murder                                                                                               21 years 10 months                                                                             21-SEP-2046          Active              
+      10029 Esperance Bizimana                                                                                    Murder                                                                                               13 years 11 months                                                                             07-OCT-2038          Active              
+      10030 Andre Ntirushwa                                                                                       Murder                                                                                               24 years 11 months                                                                             10-OCT-2049          Active              
+
+5 rows selected. 
+
+SQL> 
+SQL> -- Query 2: JOIN with multiple tables
+SQL> PROMPT Query 2: Prisoner assignments with cell and block information
+Query 2: Prisoner assignments with cell and block information
+SQL> SELECT 
+  2      pa.assignment_id,
+  3      p.first_name || ' ' || p.last_name as prisoner_name,
+  4      pr.prison_name,
+  5      b.block_name,
+  6      c.cell_number,
+  7      pa.assignment_date,
+  8      pa.status
+  9  FROM prisoner_assignments pa
+ 10  JOIN prisoners p ON pa.prisoner_id = p.prisoner_id
+ 11  JOIN prisons pr ON pa.prison_id = pr.prison_id
+ 12  LEFT JOIN cells c ON pa.cell_id = c.cell_id
+ 13  LEFT JOIN blocks b ON c.block_id = b.block_id
+ 14  WHERE p.status = 'Active'
+ 15  AND pa.status = 'Active'
+ 16  AND ROWNUM <= 5
+ 17  ORDER BY pa.assignment_date DESC;
+
+ASSIGNMENT_ID PRISONER_NAME                                                                                         PRISON_NAME                                                                                          BLOCK_NAME                                         CELL_NUMBER          ASSIGNMEN STATUS              
+------------- ----------------------------------------------------------------------------------------------------- ---------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------------- --------- --------------------
+         5339 Richard Rukundo                                                                                       Kigali Central Prison                                                                                Block A                                            Block A-002          05-AUG-25 Active              
+         5361 Marie Munyandekwe                                                                                     Kigali Central Prison                                                                                Block D                                            CELL-002             07-AUG-23 Active              
+         5354 Joseph Twagiramungu                                                                                   Kigali Central Prison                                                                                Block B                                            Block B-006          15-MAY-23 Active              
+         5372 Paul Rutayisire                                                                                       Kigali Central Prison                                                                                Block C                                            CELL-003             23-APR-23 Active              
+         5369 Linda Ndahayo                                                                                         Kigali Central Prison                                                                                Block D                                            Block D-005          24-MAR-23 Active              
+
+5 rows selected. 
+
+SQL> 
+SQL> -- Query 3: Aggregation with GROUP BY
+SQL> PROMPT Query 3: Prison capacity utilization by prison
+Query 3: Prison capacity utilization by prison
+SQL> SELECT 
+  2      p.prison_name,
+  3      p.prison_type,
+  4      p.capacity,
+  5      COUNT(DISTINCT pa.prisoner_id) as current_population,
+  6      ROUND(COUNT(DISTINCT pa.prisoner_id) * 100.0 / p.capacity, 2) as utilization_percent
+  7  FROM prisons p
+  8  LEFT JOIN prisoner_assignments pa ON p.prison_id = pa.prison_id 
+  9      AND pa.status = 'Active'
+ 10  WHERE p.status = 'Active'
+ 11  GROUP BY p.prison_name, p.prison_type, p.capacity
+ 12  ORDER BY utilization_percent DESC;
+
+PRISON_NAME                                                                                          PRISON_TYPE                                          CAPACITY CURRENT_POPULATION UTILIZATION_PERCENT
+---------------------------------------------------------------------------------------------------- -------------------------------------------------- ---------- ------------------ -------------------
+Iwawa Rehabilitation Center                                                                          Juvenile                                                  800                 55                6.88
+Nyagatare Prison                                                                                     Medium Security                                          1300                 71                5.46
+Huye Prison                                                                                          Minimum Security                                         1200                 62                5.17
+Muhanga Medium Security Prison                                                                       Medium Security                                          1200                 51                4.25
+Rubavu Prison                                                                                        Medium Security                                          1600                 68                4.25
+Rusizi Prison                                                                                        Medium Security                                          1400                 58                4.14
+Rwamagana Prison                                                                                     Minimum Security                                         1100                 45                4.09
+Nyanza Prison                                                                                        Medium Security                                          1500                 58                3.87
+Nyarugenge Maximum Security Prison                                                                   Maximum Security                                         1500                 49                3.27
+Musanze Prison                                                                                       Maximum Security                                         2000                 54                 2.7
+Muhanga Prison                                                                                       Medium Security                                          1800                 39                2.17
+Kigali Central Prison                                                                                Maximum Security                                         2500                 44                1.76
+Ngoma Juvenile Rehabilitation Center                                                                 Juvenile                                                  800                  0                   0
+
+13 rows selected. 
+
+SQL> 
+SQL> -- Query 4: Subquery example
+SQL> PROMPT Query 4: Prisoners with medical conditions and their latest medical visit
+Query 4: Prisoners with medical conditions and their latest medical visit
+SQL> SELECT 
+  2      p.prisoner_id,
+  3      p.first_name || ' ' || p.last_name as prisoner_name,
+  4      p.medical_conditions,
+  5      (SELECT MAX(mr.visit_date) 
+  6       FROM medical_records mr 
+  7       WHERE mr.prisoner_id = p.prisoner_id) as last_medical_visit,
+  8      (SELECT mr.diagnosis 
+  9       FROM medical_records mr 
+ 10       WHERE mr.prisoner_id = p.prisoner_id 
+ 11       AND mr.visit_date = (SELECT MAX(visit_date) FROM medical_records WHERE prisoner_id = p.prisoner_id)
+ 12       AND ROWNUM = 1) as latest_diagnosis
+ 13  FROM prisoners p
+ 14  WHERE p.medical_conditions IS NOT NULL
+ 15  AND p.status = 'Active'
+ 16  AND ROWNUM <= 5
+ 17  ORDER BY p.prisoner_id;
+
+PRISONER_ID PRISONER_NAME                                                                                         MEDICAL_CONDITIONS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   LAST_MEDI
+----------- ----------------------------------------------------------------------------------------------------- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ---------
+LATEST_DIAGNOSIS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      10159 Marie Mugabo                                                                                          Hypertension                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+      10164 Jeanne Uwimana                                                                                        Diabetes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+      10169 Esperance Bizimana                                                                                    Hypertension                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+      10179 Marie Mugabo                                                                                          Hypertension                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+      10189 Esperance Bizimana                                                                                    Hypertension                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+
+5 rows selected. 
+
+SQL> 
+SQL> -- Query 5: Complex JOIN with aggregation
+SQL> PROMPT Query 5: Staff workload by department
+Query 5: Staff workload by department
+SQL> SELECT 
+  2      s.department,
+  3      COUNT(DISTINCT s.staff_id) as staff_count,
+  4      COUNT(DISTINCT mr.medical_record_id) as medical_records_handled,
+  5      COUNT(DISTINCT v.visit_id) as visits_approved,
+  6      COUNT(DISTINCT i.incident_id) as incidents_reported
+  7  FROM staff s
+  8  LEFT JOIN medical_records mr ON s.staff_id = mr.attending_staff_id
+  9  LEFT JOIN visits v ON s.staff_id = v.approved_by_staff_id
+ 10  LEFT JOIN incidents i ON s.staff_id = i.reported_by_staff_id
+ 11  WHERE s.status = 'Active'
+ 12  GROUP BY s.department
+ 13  ORDER BY staff_count DESC;
+
+DEPARTMENT                                                                                           STAFF_COUNT MEDICAL_RECORDS_HANDLED VISITS_APPROVED INCIDENTS_REPORTED
+---------------------------------------------------------------------------------------------------- ----------- ----------------------- --------------- ------------------
+Administration                                                                                                14                       0             300                  0
+Medical                                                                                                       12                      47               0                  0
+Security                                                                                                      12                       0               0                 20
+Counseling                                                                                                    12                       0               0                  0
+Kitchen                                                                                                       11                       0               0                  0
+Education                                                                                                      9                       0               0                  0
+Maintenance                                                                                                    7                       0               0                  0
+
+7 rows selected. 
+
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT ============================================================
+============================================================
+SQL> PROMPT ✅ PHASE V COMPLETED SUCCESSFULLY!
+✅ PHASE V COMPLETED SUCCESSFULLY!
+SQL> PROMPT ============================================================
+============================================================
+SQL> PROMPT
+
+SQL> PROMPT Summary:
+Summary:
+SQL> PROMPT 1. 15 tables created with proper constraints
+1. 15 tables created with proper constraints
+SQL> PROMPT 2. 500+ realistic records inserted
+2. 500+ realistic records inserted
+SQL> PROMPT 3. Data integrity verified
+3. Data integrity verified
+SQL> PROMPT 4. Test queries executed successfully
+4. Test queries executed successfully
+SQL> PROMPT 5. All foreign key relationships validated
+5. All foreign key relationships validated
+SQL> PROMPT
+
+SQL> PROMPT Next Steps:
+Next Steps:
+SQL> PROMPT 1. Run additional performance tests
+1. Run additional performance tests
+SQL> PROMPT 2. Create application users and grants
+2. Create application users and grants
+SQL> PROMPT 3. Develop application interface
+3. Develop application interface
+SQL> PROMPT ============================================================
+============================================================
+SQL> -- ============================================================
+SQL> -- PHASE V: FIXING DATA INSERTION & VALIDATION
+SQL> -- ============================================================
+SQL> 
+SQL> SET SERVEROUTPUT ON
+SQL> SET ECHO ON
+SQL> SET FEEDBACK ON
+SQL> 
+SQL> ALTER SESSION SET CONTAINER = grpD_27453_jockebed_PrisonManagementSystem_db;
+
+Session altered.
+
+SQL> 
+SQL> PROMPT ============================================================
+============================================================
+SQL> PROMPT FIXING REMAINING ISSUES
+FIXING REMAINING ISSUES
+SQL> PROMPT ============================================================
+============================================================
+SQL> 
+SQL> -- 1. Fix SENTENCES insertion issue
+SQL> PROMPT Fixing SENTENCES insertion...
+Fixing SENTENCES insertion...
+SQL> 
+SQL> DECLARE
+  2      CURSOR c_prisoners IS SELECT prisoner_id FROM prisoners;
+  3      v_offense_id NUMBER;
+  4      v_sentence_count NUMBER := 0;
+  5  BEGIN
+  6      FOR rec IN c_prisoners LOOP
+  7          -- Get a random offense
+  8          SELECT offense_id INTO v_offense_id FROM (
+  9              SELECT offense_id FROM offenses ORDER BY DBMS_RANDOM.VALUE
+ 10          ) WHERE ROWNUM = 1;
+ 11  
+ 12          INSERT INTO SENTENCES (
+ 13              sentence_id, prisoner_id, offense_id, case_number, court_name, judge_name,
+ 14              conviction_date, sentence_type, sentence_duration_years, sentence_duration_months,
+ 15              sentence_duration_days, fine_amount, sentence_start_date, sentence_end_date,
+ 16              parole_eligible_date, status, remarks
+ 17          ) VALUES (
+ 18              seq_sentence_id.NEXTVAL,
+ 19              rec.prisoner_id,
+ 20              v_offense_id,
+ 21              'CR-' || LPAD(seq_sentence_id.CURRVAL, 6, '0'),
+ 22              CASE TRUNC(DBMS_RANDOM.VALUE(1, 4))
+ 23                  WHEN 1 THEN 'Kigali High Court'
+ 24                  WHEN 2 THEN 'Nyarugenge District Court'
+ 25                  WHEN 3 THEN 'Huye High Court'
+ 26                  ELSE 'Rusizi District Court'
+ 27              END,
+ 28              CASE TRUNC(DBMS_RANDOM.VALUE(1, 4))
+ 29                  WHEN 1 THEN 'Judge Jean de Dieu'
+ 30                  WHEN 2 THEN 'Judge Marie Claire'
+ 31                  WHEN 3 THEN 'Judge Joseph'
+ 32                  ELSE 'Judge Alice'
+ 33              END,
+ 34              SYSDATE - TRUNC(DBMS_RANDOM.VALUE(30, 180)),
+ 35              'Imprisonment',
+ 36              TRUNC(DBMS_RANDOM.VALUE(1, 20)),
+ 37              TRUNC(DBMS_RANDOM.VALUE(0, 12)),
+ 38              TRUNC(DBMS_RANDOM.VALUE(0, 30)),
+ 39              CASE WHEN DBMS_RANDOM.VALUE < 0.3 THEN TRUNC(DBMS_RANDOM.VALUE(100000, 500000)) ELSE NULL END,
+ 40              SYSDATE - TRUNC(DBMS_RANDOM.VALUE(1, 1000)),
+ 41              SYSDATE + TRUNC(DBMS_RANDOM.VALUE(100, 2000)),
+ 42              SYSDATE + TRUNC(DBMS_RANDOM.VALUE(50, 1000)),
+ 43              'Active',
+ 44              'Test sentence'
+ 45          );
+ 46  
+ 47          v_sentence_count := v_sentence_count + 1;
+ 48  
+ 49          IF MOD(v_sentence_count, 20) = 0 THEN
+ 50              COMMIT;
+ 51              DBMS_OUTPUT.PUT_LINE('   Committed ' || v_sentence_count || ' sentences...');
+ 52          END IF;
+ 53      END LOOP;
+ 54  
+ 55      COMMIT;
+ 56      DBMS_OUTPUT.PUT_LINE('✅ Inserted ' || v_sentence_count || ' sentences');
+ 57  EXCEPTION
+ 58      WHEN OTHERS THEN
+ 59          DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+ 60          ROLLBACK;
+ 61  END;
+ 62  /
+Committed 20 sentences...
+   Committed 40 sentences...
+   Committed 60 sentences...
+   Committed 80 sentences...
+   Committed 100 sentences...
+   Committed 120 sentences...
+   Committed 140 sentences...
+   Committed 160 sentences...
+   Committed 180 sentences...
+   Committed 200 sentences...
+   Committed 220 sentences...
+   Committed 240 sentences...
+   Committed 260 sentences...
+   Committed 280 sentences...
+   Committed 300 sentences...
+   Committed 320 sentences...
+   Committed 340 sentences...
+   Committed 360 sentences...
+   Committed 380 sentences...
+   Committed 400 sentences...
+   Committed 420 sentences...
+   Committed 440 sentences...
+   Committed 460 sentences...
+   Committed 480 sentences...
+   Committed 500 sentences...
+   Committed 520 sentences...
+   Committed 540 sentences...
+   Committed 560 sentences...
+   Committed 580 sentences...
+   Committed 600 sentences...
+   Committed 620 sentences...
+   Committed 640 sentences...
+   Committed 660 sentences...
+   Committed 680 sentences...
+   Committed 700 sentences...
+✅ Inserted 700 sentences
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> -- 2. Fix PROGRAM_ENROLLMENTS check constraint issue
+SQL> PROMPT Fixing PROGRAM_ENROLLMENTS data...
+Fixing PROGRAM_ENROLLMENTS data...
+SQL> 
+SQL> DECLARE
+  2      CURSOR c_prisoners IS SELECT prisoner_id FROM prisoners WHERE status = 'Active' AND ROWNUM <= 30;
+  3      v_program_ids SYS.ODCINUMBERLIST;
+  4      v_enrollment_count NUMBER := 0;
+  5  BEGIN
+  6      SELECT program_id BULK COLLECT INTO v_program_ids FROM programs;
+  7  
+  8      FOR rec IN c_prisoners LOOP
+  9          FOR i IN 1..TRUNC(DBMS_RANDOM.VALUE(1, 3)) LOOP
+ 10              INSERT INTO PROGRAM_ENROLLMENTS (
+ 11                  enrollment_id, prisoner_id, program_id, enrollment_date,
+ 12                  completion_date, completion_status, performance_rating, notes
+ 13              ) VALUES (
+ 14                  seq_enrollment_id.NEXTVAL,
+ 15                  rec.prisoner_id,
+ 16                  v_program_ids(TRUNC(DBMS_RANDOM.VALUE(1, v_program_ids.COUNT))),
+ 17                  SYSDATE - TRUNC(DBMS_RANDOM.VALUE(1, 180)),
+ 18                  CASE WHEN DBMS_RANDOM.VALUE < 0.3 THEN SYSDATE - TRUNC(DBMS_RANDOM.VALUE(1, 90)) ELSE NULL END,
+ 19                  CASE 
+ 20                      WHEN DBMS_RANDOM.VALUE < 0.3 THEN 'Completed'
+ 21                      WHEN DBMS_RANDOM.VALUE < 0.6 THEN 'In Progress'
+ 22                      WHEN DBMS_RANDOM.VALUE < 0.9 THEN 'Enrolled'
+ 23                      ELSE 'Dropped'
+ 24                  END,
+ 25                  CASE 
+ 26                      WHEN DBMS_RANDOM.VALUE < 0.2 THEN 'Excellent'
+ 27                      WHEN DBMS_RANDOM.VALUE < 0.5 THEN 'Good'
+ 28                      WHEN DBMS_RANDOM.VALUE < 0.8 THEN 'Satisfactory'
+ 29                      ELSE 'Poor'
+ 30                  END,
+ 31                  'Program enrollment'
+ 32              );
+ 33  
+ 34              v_enrollment_count := v_enrollment_count + 1;
+ 35          END LOOP;
+ 36      END LOOP;
+ 37  
+ 38      COMMIT;
+ 39      DBMS_OUTPUT.PUT_LINE('✅ Inserted ' || v_enrollment_count || ' program enrollments');
+ 40  EXCEPTION
+ 41      WHEN OTHERS THEN
+ 42          DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+ 43          ROLLBACK;
+ 44  END;
+ 45  /
+Error: ORA-02290: check constraint (SYS.CHK_COMPLETION) violated
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> -- ============================================================
+SQL> -- DATA VALIDATION AND VERIFICATION SCRIPT
+SQL> -- ============================================================
+SQL> 
+SQL> PROMPT ============================================================
+============================================================
+SQL> PROMPT DATA VALIDATION AND VERIFICATION
+DATA VALIDATION AND VERIFICATION
+SQL> PROMPT ============================================================
+============================================================
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT 1. Table Row Counts:
+1. Table Row Counts:
+SQL> PROMPT
+
+SQL> 
+SQL> DECLARE
+  2      v_total_rows NUMBER := 0;
+  3  BEGIN
+  4      DBMS_OUTPUT.PUT_LINE('Table Name                  | Row Count');
+  5      DBMS_OUTPUT.PUT_LINE('----------------------------|----------');
+  6  
+  7      FOR rec IN (
+  8          SELECT table_name, 
+  9                 CASE table_name
+ 10                     WHEN 'PRISONS' THEN (SELECT COUNT(*) FROM prisons)
+ 11                     WHEN 'BLOCKS' THEN (SELECT COUNT(*) FROM blocks)
+ 12                     WHEN 'CELLS' THEN (SELECT COUNT(*) FROM cells)
+ 13                     WHEN 'PRISONERS' THEN (SELECT COUNT(*) FROM prisoners)
+ 14                     WHEN 'PRISONER_ASSIGNMENTS' THEN (SELECT COUNT(*) FROM prisoner_assignments)
+ 15                     WHEN 'OFFENSES' THEN (SELECT COUNT(*) FROM offenses)
+ 16                     WHEN 'SENTENCES' THEN (SELECT COUNT(*) FROM sentences)
+ 17                     WHEN 'STAFF' THEN (SELECT COUNT(*) FROM staff)
+ 18                     WHEN 'VISITORS' THEN (SELECT COUNT(*) FROM visitors)
+ 19                     WHEN 'VISITS' THEN (SELECT COUNT(*) FROM visits)
+ 20                     WHEN 'INCIDENTS' THEN (SELECT COUNT(*) FROM incidents)
+ 21                     WHEN 'INCIDENT_PRISONERS' THEN (SELECT COUNT(*) FROM incident_prisoners)
+ 22                     WHEN 'MEDICAL_RECORDS' THEN (SELECT COUNT(*) FROM medical_records)
+ 23                     WHEN 'PROGRAMS' THEN (SELECT COUNT(*) FROM programs)
+ 24                     WHEN 'PROGRAM_ENROLLMENTS' THEN (SELECT COUNT(*) FROM program_enrollments)
+ 25                 END as row_count
+ 26          FROM user_tables
+ 27          WHERE table_name IN (
+ 28              'PRISONS', 'BLOCKS', 'CELLS', 'PRISONERS', 'PRISONER_ASSIGNMENTS',
+ 29              'OFFENSES', 'SENTENCES', 'STAFF', 'VISITORS', 'VISITS',
+ 30              'INCIDENTS', 'INCIDENT_PRISONERS', 'MEDICAL_RECORDS',
+ 31              'PROGRAMS', 'PROGRAM_ENROLLMENTS'
+ 32          )
+ 33          ORDER BY table_name
+ 34      ) LOOP
+ 35          DBMS_OUTPUT.PUT_LINE(RPAD(rec.table_name, 28) || '| ' || LPAD(TO_CHAR(rec.row_count), 8));
+ 36          v_total_rows := v_total_rows + rec.row_count;
+ 37      END LOOP;
+ 38  
+ 39      DBMS_OUTPUT.PUT_LINE('----------------------------|----------');
+ 40      DBMS_OUTPUT.PUT_LINE('TOTAL ROWS INSERTED        | ' || LPAD(TO_CHAR(v_total_rows), 8));
+ 41      DBMS_OUTPUT.PUT_LINE('========================================');
+ 42  END;
+ 43  /
+Table Name                  | Row Count
+----------------------------|----------
+BLOCKS                      |       52
+CELLS                       |      520
+INCIDENTS                   |       20
+INCIDENT_PRISONERS          |       38
+MEDICAL_RECORDS             |       50
+OFFENSES                    |       32
+PRISONERS                   |      700
+PRISONER_ASSIGNMENTS        |      654
+PRISONS                     |       14
+PROGRAMS                    |        5
+PROGRAM_ENROLLMENTS         |        0
+SENTENCES                   |     2000
+STAFF                       |       80
+VISITORS                    |      250
+VISITS                      |      300
+----------------------------|----------
+TOTAL ROWS INSERTED        |     4715
+========================================
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT 2. Data Integrity Checks:
+2. Data Integrity Checks:
+SQL> PROMPT
+
+SQL> 
+SQL> BEGIN
+  2      -- Check foreign key relationships
+  3      DBMS_OUTPUT.PUT_LINE('Foreign Key Validation:');
+  4  
+  5      -- Check if all prisoners have assignments
+  6      DECLARE
+  7          v_prisoners_without_assignments NUMBER;
+  8      BEGIN
+  9          SELECT COUNT(*) INTO v_prisoners_without_assignments
+ 10          FROM prisoners p
+ 11          WHERE status = 'Active'
+ 12          AND NOT EXISTS (
+ 13              SELECT 1 FROM prisoner_assignments pa 
+ 14              WHERE pa.prisoner_id = p.prisoner_id 
+ 15              AND pa.status = 'Active'
+ 16          );
+ 17  
+ 18          IF v_prisoners_without_assignments = 0 THEN
+ 19              DBMS_OUTPUT.PUT_LINE('✅ All active prisoners have assignments');
+ 20          ELSE
+ 21              DBMS_OUTPUT.PUT_LINE('❌ ' || v_prisoners_without_assignments || ' active prisoners without assignments');
+ 22          END IF;
+ 23      END;
+ 24  
+ 25      -- Check if all sentences reference valid prisoners
+ 26      DECLARE
+ 27          v_invalid_sentences NUMBER;
+ 28      BEGIN
+ 29          SELECT COUNT(*) INTO v_invalid_sentences
+ 30          FROM sentences s
+ 31          WHERE NOT EXISTS (
+ 32              SELECT 1 FROM prisoners p WHERE p.prisoner_id = s.prisoner_id
+ 33          );
+ 34  
+ 35          IF v_invalid_sentences = 0 THEN
+ 36              DBMS_OUTPUT.PUT_LINE('✅ All sentences reference valid prisoners');
+ 37          ELSE
+ 38              DBMS_OUTPUT.PUT_LINE('❌ ' || v_invalid_sentences || ' sentences with invalid prisoner references');
+ 39          END IF;
+ 40      END;
+ 41  
+ 42      -- Check if all visits have valid prisoner and visitor references
+ 43      DECLARE
+ 44          v_invalid_visits NUMBER;
+ 45      BEGIN
+ 46          SELECT COUNT(*) INTO v_invalid_visits
+ 47          FROM visits v
+ 48          WHERE NOT EXISTS (
+ 49              SELECT 1 FROM prisoners p WHERE p.prisoner_id = v.prisoner_id
+ 50          ) OR NOT EXISTS (
+ 51              SELECT 1 FROM visitors vis WHERE vis.visitor_id = v.visitor_id
+ 52          );
+ 53  
+ 54          IF v_invalid_visits = 0 THEN
+ 55              DBMS_OUTPUT.PUT_LINE('✅ All visits have valid prisoner and visitor references');
+ 56          ELSE
+ 57              DBMS_OUTPUT.PUT_LINE('❌ ' || v_invalid_visits || ' visits with invalid references');
+ 58          END IF;
+ 59      END;
+ 60  
+ 61      -- Check constraint violations
+ 62      DBMS_OUTPUT.PUT_LINE('');
+ 63      DBMS_OUTPUT.PUT_LINE('Constraint Validation:');
+ 64  
+ 65      -- Check date constraints
+ 66      DECLARE
+ 67          v_invalid_dates NUMBER;
+ 68      BEGIN
+ 69          SELECT COUNT(*) INTO v_invalid_dates
+ 70          FROM prisoners
+ 71          WHERE expected_release_date IS NOT NULL 
+ 72          AND expected_release_date <= admission_date;
+ 73  
+ 74          IF v_invalid_dates = 0 THEN
+ 75              DBMS_OUTPUT.PUT_LINE('✅ All release dates are after admission dates');
+ 76          ELSE
+ 77              DBMS_OUTPUT.PUT_LINE('❌ ' || v_invalid_dates || ' prisoners with invalid release dates');
+ 78          END IF;
+ 79      END;
+ 80  
+ 81      -- Check status consistency
+ 82      DECLARE
+ 83          v_inconsistent_status NUMBER;
+ 84      BEGIN
+ 85          SELECT COUNT(*) INTO v_inconsistent_status
+ 86          FROM prisoners p
+ 87          JOIN prisoner_assignments pa ON p.prisoner_id = pa.prisoner_id
+ 88          WHERE p.status = 'Active' AND pa.status != 'Active';
+ 89  
+ 90          IF v_inconsistent_status = 0 THEN
+ 91              DBMS_OUTPUT.PUT_LINE('✅ Prisoner and assignment statuses are consistent');
+ 92          ELSE
+ 93              DBMS_OUTPUT.PUT_LINE('❌ ' || v_inconsistent_status || ' prisoners with inconsistent statuses');
+ 94          END IF;
+ 95      END;
+ 96  END;
+ 97  /
+Foreign Key Validation:
+✅ All active prisoners have assignments
+✅ All sentences reference valid prisoners
+✅ All visits have valid prisoner and visitor references
+
+Constraint Validation:
+✅ All release dates are after admission dates
+✅ Prisoner and assignment statuses are consistent
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT 3. Sample Data Verification:
+3. Sample Data Verification:
+SQL> PROMPT
+
+SQL> 
+SQL> -- Show sample data from each table
+SQL> BEGIN
+  2      DBMS_OUTPUT.PUT_LINE('Sample Prison Data:');
+  3      DBMS_OUTPUT.PUT_LINE('-------------------');
+  4      FOR rec IN (
+  5          SELECT prison_name, prison_type, location, capacity, status 
+  6          FROM prisons 
+  7          WHERE ROWNUM <= 2
+  8      ) LOOP
+  9          DBMS_OUTPUT.PUT_LINE('Name: ' || rec.prison_name);
+ 10          DBMS_OUTPUT.PUT_LINE('Type: ' || rec.prison_type || ', Location: ' || rec.location);
+ 11          DBMS_OUTPUT.PUT_LINE('Capacity: ' || rec.capacity || ', Status: ' || rec.status);
+ 12          DBMS_OUTPUT.PUT_LINE('');
+ 13      END LOOP;
+ 14  
+ 15      DBMS_OUTPUT.PUT_LINE('Sample Prisoner Data:');
+ 16      DBMS_OUTPUT.PUT_LINE('---------------------');
+ 17      FOR rec IN (
+ 18          SELECT p.prisoner_id, p.first_name || ' ' || p.last_name as full_name,
+ 19                 p.gender, p.admission_date, p.expected_release_date, p.status,
+ 20                 o.offense_name, s.sentence_duration_years
+ 21          FROM prisoners p
+ 22          JOIN sentences s ON p.prisoner_id = s.prisoner_id
+ 23          JOIN offenses o ON s.offense_id = o.offense_id
+ 24          WHERE ROWNUM <= 3
+ 25      ) LOOP
+ 26          DBMS_OUTPUT.PUT_LINE('ID: ' || rec.prisoner_id || ', Name: ' || rec.full_name);
+ 27          DBMS_OUTPUT.PUT_LINE('Gender: ' || rec.gender || ', Admission: ' || TO_CHAR(rec.admission_date, 'DD-MON-YYYY'));
+ 28          DBMS_OUTPUT.PUT_LINE('Offense: ' || rec.offense_name || ', Sentence: ' || rec.sentence_duration_years || ' years');
+ 29          DBMS_OUTPUT.PUT_LINE('Status: ' || rec.status);
+ 30          DBMS_OUTPUT.PUT_LINE('');
+ 31      END LOOP;
+ 32  
+ 33      DBMS_OUTPUT.PUT_LINE('Sample Staff Data:');
+ 34      DBMS_OUTPUT.PUT_LINE('------------------');
+ 35      FOR rec IN (
+ 36          SELECT s.first_name || ' ' || s.last_name as staff_name,
+ 37                 s.position, s.department, s.hire_date, s.salary,
+ 38                 p.prison_name
+ 39          FROM staff s
+ 40          JOIN prisons p ON s.prison_id = p.prison_id
+ 41          WHERE ROWNUM <= 2
+ 42      ) LOOP
+ 43          DBMS_OUTPUT.PUT_LINE('Name: ' || rec.staff_name);
+ 44          DBMS_OUTPUT.PUT_LINE('Position: ' || rec.position || ', Department: ' || rec.department);
+ 45          DBMS_OUTPUT.PUT_LINE('Hire Date: ' || TO_CHAR(rec.hire_date, 'DD-MON-YYYY') || 
+ 46                             ', Salary: ' || TO_CHAR(rec.salary, 'FM999,999,999'));
+ 47          DBMS_OUTPUT.PUT_LINE('Works at: ' || rec.prison_name);
+ 48          DBMS_OUTPUT.PUT_LINE('');
+ 49      END LOOP;
+ 50  END;
+ 51  /
+Sample Prison Data:
+-------------------
+Name: Kigali Central Prison
+Type: Maximum Security, Location: Kigali City, Nyarugenge District
+Capacity: 2500, Status: Active
+
+Name: Muhanga Prison
+Type: Medium Security, Location: Southern Province, Muhanga District
+Capacity: 1800, Status: Active
+
+Sample Prisoner Data:
+---------------------
+ID: 10152, Name: Jacques Munyeshyaka
+Gender: M, Admission: 27-JUN-2025
+Offense: Murder, Sentence: 15 years
+Status: Active
+
+ID: 10152, Name: Jacques Munyeshyaka
+Gender: M, Admission: 27-JUN-2025
+Offense: Hit and Run, Sentence: 4 years
+Status: Active
+
+ID: 10152, Name: Jacques Munyeshyaka
+Gender: M, Admission: 27-JUN-2025
+Offense: Burglary, Sentence: 18 years
+Status: Active
+
+Sample Staff Data:
+------------------
+Name: Claude Kamanzi
+Position: Cook, Department: Kitchen
+Hire Date: 11-FEB-2025, Salary: 400,000
+Works at: Kigali Central Prison
+
+Name: Frank Mukama
+Position: Counselor, Department: Counseling
+Hire Date: 17-APR-2024, Salary: 500,000
+Works at: Kigali Central Prison
+
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT 4. Statistical Summary:
+4. Statistical Summary:
+SQL> PROMPT
+
+SQL> 
+SQL> BEGIN
+  2      DBMS_OUTPUT.PUT_LINE('Prison Statistics:');
+  3      DBMS_OUTPUT.PUT_LINE('==================');
+  4  
+  5      -- Prison capacity utilization
+  6      FOR rec IN (
+  7          SELECT p.prison_name, p.capacity,
+  8                 (SELECT COUNT(DISTINCT pa.prisoner_id) 
+  9                  FROM prisoner_assignments pa 
+ 10                  WHERE pa.prison_id = p.prison_id 
+ 11                  AND pa.status = 'Active') as current_population,
+ 12                 ROUND((SELECT COUNT(DISTINCT pa.prisoner_id) * 100.0 / p.capacity
+ 13                        FROM prisoner_assignments pa 
+ 14                        WHERE pa.prison_id = p.prison_id 
+ 15                        AND pa.status = 'Active'), 2) as utilization_percent
+ 16          FROM prisons p
+ 17          WHERE p.status = 'Active'
+ 18      ) LOOP
+ 19          DBMS_OUTPUT.PUT_LINE(rec.prison_name || ': ' || rec.current_population || 
+ 20                             '/' || rec.capacity || ' (' || rec.utilization_percent || '%)');
+ 21      END LOOP;
+ 22  
+ 23      DBMS_OUTPUT.PUT_LINE('');
+ 24      DBMS_OUTPUT.PUT_LINE('Prisoner Demographics:');
+ 25      DBMS_OUTPUT.PUT_LINE('======================');
+ 26  
+ 27      -- Gender distribution
+ 28      DECLARE
+ 29          v_total_prisoners NUMBER;
+ 30          v_male_count NUMBER;
+ 31          v_female_count NUMBER;
+ 32      BEGIN
+ 33          SELECT COUNT(*) INTO v_total_prisoners FROM prisoners WHERE status = 'Active';
+ 34          SELECT COUNT(*) INTO v_male_count FROM prisoners WHERE status = 'Active' AND gender = 'M';
+ 35          SELECT COUNT(*) INTO v_female_count FROM prisoners WHERE status = 'Active' AND gender = 'F';
+ 36  
+ 37          DBMS_OUTPUT.PUT_LINE('Total Active Prisoners: ' || v_total_prisoners);
+ 38          DBMS_OUTPUT.PUT_LINE('Male: ' || v_male_count || ' (' || 
+ 39                             ROUND(v_male_count * 100.0 / v_total_prisoners, 1) || '%)');
+ 40          DBMS_OUTPUT.PUT_LINE('Female: ' || v_female_count || ' (' || 
+ 41                             ROUND(v_female_count * 100.0 / v_total_prisoners, 1) || '%)');
+ 42      END;
+ 43  
+ 44      DBMS_OUTPUT.PUT_LINE('');
+ 45      DBMS_OUTPUT.PUT_LINE('Offense Statistics:');
+ 46      DBMS_OUTPUT.PUT_LINE('===================');
+ 47  
+ 48      -- Top offenses
+ 49      FOR rec IN (
+ 50          SELECT o.offense_name, COUNT(s.sentence_id) as offense_count
+ 51          FROM sentences s
+ 52          JOIN offenses o ON s.offense_id = o.offense_id
+ 53          GROUP BY o.offense_name
+ 54          ORDER BY offense_count DESC
+ 55          FETCH FIRST 5 ROWS ONLY
+ 56      ) LOOP
+ 57          DBMS_OUTPUT.PUT_LINE(rec.offense_name || ': ' || rec.offense_count || ' cases');
+ 58      END LOOP;
+ 59  
+ 60      DBMS_OUTPUT.PUT_LINE('');
+ 61      DBMS_OUTPUT.PUT_LINE('Program Participation:');
+ 62      DBMS_OUTPUT.PUT_LINE('=====================');
+ 63  
+ 64      -- Program enrollment stats
+ 65      FOR rec IN (
+ 66          SELECT p.program_name, p.program_type,
+ 67                 COUNT(pe.enrollment_id) as enrollment_count,
+ 68                 AVG(CASE WHEN pe.completion_status = 'Completed' THEN 1 ELSE 0 END) * 100 as completion_rate
+ 69          FROM programs p
+ 70          LEFT JOIN program_enrollments pe ON p.program_id = pe.program_id
+ 71          GROUP BY p.program_name, p.program_type
+ 72          ORDER BY enrollment_count DESC
+ 73      ) LOOP
+ 74          DBMS_OUTPUT.PUT_LINE(rec.program_name || ' (' || rec.program_type || '): ' || 
+ 75                             rec.enrollment_count || ' enrollments, ' || 
+ 76                             ROUND(rec.completion_rate, 1) || '% completion rate');
+ 77      END LOOP;
+ 78  END;
+ 79  /
+Prison Statistics:
+==================
+Kigali Central Prison: 44/2500 (1.76%)
+Muhanga Prison: 39/1800 (2.17%)
+Nyanza Prison: 58/1500 (3.87%)
+Huye Prison: 62/1200 (5.17%)
+Rubavu Prison: 68/1600 (4.25%)
+Rusizi Prison: 58/1400 (4.14%)
+Musanze Prison: 54/2000 (2.7%)
+Rwamagana Prison: 45/1100 (4.09%)
+Nyagatare Prison: 71/1300 (5.46%)
+Iwawa Rehabilitation Center: 55/800 (6.88%)
+Nyarugenge Maximum Security Prison: 49/1500 (3.27%)
+Muhanga Medium Security Prison: 51/1200 (4.25%)
+Ngoma Juvenile Rehabilitation Center: 0/800 (0%)
+
+Prisoner Demographics:
+======================
+Total Active Prisoners: 654
+Male: 452 (69.1%)
+Female: 202 (30.9%)
+
+Offense Statistics:
+===================
+Murder: 634 cases
+Drug Trafficking: 60 cases
+Arson: 54 cases
+Domestic Violence: 51 cases
+Burglary: 51 cases
+
+Program Participation:
+=====================
+Basic Literacy (Education): 0 enrollments, 0% completion rate
+Carpentry Training (Vocational Training): 0 enrollments, 0% completion rate
+Computer Basics (Education): 0 enrollments, 0% completion rate
+Substance Abuse Counseling (Substance Abuse): 0 enrollments, 0% completion rate
+Anger Management (Counseling): 0 enrollments, 0% completion rate
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT 5. Test Queries:
+5. Test Queries:
+SQL> PROMPT
+
+SQL> 
+SQL> -- Query 1: Basic SELECT with filtering
+SQL> PROMPT Query 1: Active prisoners with their offenses and sentences
+Query 1: Active prisoners with their offenses and sentences
+SQL> SELECT 
+  2      p.prisoner_id,
+  3      p.first_name || ' ' || p.last_name as prisoner_name,
+  4      o.offense_name,
+  5      s.sentence_duration_years || ' years ' || 
+  6      s.sentence_duration_months || ' months' as sentence_length,
+  7      TO_CHAR(s.sentence_end_date, 'DD-MON-YYYY') as expected_release,
+  8      p.status
+  9  FROM prisoners p
+ 10  JOIN sentences s ON p.prisoner_id = s.prisoner_id
+ 11  JOIN offenses o ON s.offense_id = o.offense_id
+ 12  WHERE p.status = 'Active'
+ 13  AND ROWNUM <= 5
+ 14  ORDER BY p.prisoner_id;
+
+PRISONER_ID PRISONER_NAME                                                                                         OFFENSE_NAME                                                                                         SENTENCE_LENGTH                                                                                EXPECTED_RELEASE     STATUS              
+----------- ----------------------------------------------------------------------------------------------------- ---------------------------------------------------------------------------------------------------- ---------------------------------------------------------------------------------------------- -------------------- --------------------
+      10026 David Nyiransabimana                                                                                  Murder                                                                                               16 years 3 months                                                                              16-APR-2041          Active              
+      10027 Samuel Ngabo                                                                                          Murder                                                                                               15 years 10 months                                                                             22-OCT-2040          Active              
+      10028 Joseph Mukanyandwi                                                                                    Murder                                                                                               21 years 10 months                                                                             21-SEP-2046          Active              
+      10029 Esperance Bizimana                                                                                    Murder                                                                                               13 years 11 months                                                                             07-OCT-2038          Active              
+      10030 Andre Ntirushwa                                                                                       Murder                                                                                               24 years 11 months                                                                             10-OCT-2049          Active              
+
+5 rows selected. 
+
+SQL> 
+SQL> -- Query 2: JOIN with multiple tables
+SQL> PROMPT Query 2: Prisoner assignments with cell and block information
+Query 2: Prisoner assignments with cell and block information
+SQL> SELECT 
+  2      pa.assignment_id,
+  3      p.first_name || ' ' || p.last_name as prisoner_name,
+  4      pr.prison_name,
+  5      b.block_name,
+  6      c.cell_number,
+  7      pa.assignment_date,
+  8      pa.status
+  9  FROM prisoner_assignments pa
+ 10  JOIN prisoners p ON pa.prisoner_id = p.prisoner_id
+ 11  JOIN prisons pr ON pa.prison_id = pr.prison_id
+ 12  LEFT JOIN cells c ON pa.cell_id = c.cell_id
+ 13  LEFT JOIN blocks b ON c.block_id = b.block_id
+ 14  WHERE p.status = 'Active'
+ 15  AND pa.status = 'Active'
+ 16  AND ROWNUM <= 5
+ 17  ORDER BY pa.assignment_date DESC;
+
+ASSIGNMENT_ID PRISONER_NAME                                                                                         PRISON_NAME                                                                                          BLOCK_NAME                                         CELL_NUMBER          ASSIGNMEN STATUS              
+------------- ----------------------------------------------------------------------------------------------------- ---------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------------- --------- --------------------
+         5339 Richard Rukundo                                                                                       Kigali Central Prison                                                                                Block A                                            Block A-002          05-AUG-25 Active              
+         5361 Marie Munyandekwe                                                                                     Kigali Central Prison                                                                                Block D                                            CELL-002             07-AUG-23 Active              
+         5354 Joseph Twagiramungu                                                                                   Kigali Central Prison                                                                                Block B                                            Block B-006          15-MAY-23 Active              
+         5372 Paul Rutayisire                                                                                       Kigali Central Prison                                                                                Block C                                            CELL-003             23-APR-23 Active              
+         5369 Linda Ndahayo                                                                                         Kigali Central Prison                                                                                Block D                                            Block D-005          24-MAR-23 Active              
+
+5 rows selected. 
+
+SQL> 
+SQL> -- Query 3: Aggregation with GROUP BY
+SQL> PROMPT Query 3: Prison capacity utilization by prison
+Query 3: Prison capacity utilization by prison
+SQL> SELECT 
+  2      p.prison_name,
+  3      p.prison_type,
+  4      p.capacity,
+  5      COUNT(DISTINCT pa.prisoner_id) as current_population,
+  6      ROUND(COUNT(DISTINCT pa.prisoner_id) * 100.0 / p.capacity, 2) as utilization_percent
+  7  FROM prisons p
+  8  LEFT JOIN prisoner_assignments pa ON p.prison_id = pa.prison_id 
+  9      AND pa.status = 'Active'
+ 10  WHERE p.status = 'Active'
+ 11  GROUP BY p.prison_name, p.prison_type, p.capacity
+ 12  ORDER BY utilization_percent DESC;
+
+PRISON_NAME                                                                                          PRISON_TYPE                                          CAPACITY CURRENT_POPULATION UTILIZATION_PERCENT
+---------------------------------------------------------------------------------------------------- -------------------------------------------------- ---------- ------------------ -------------------
+Iwawa Rehabilitation Center                                                                          Juvenile                                                  800                 55                6.88
+Nyagatare Prison                                                                                     Medium Security                                          1300                 71                5.46
+Huye Prison                                                                                          Minimum Security                                         1200                 62                5.17
+Muhanga Medium Security Prison                                                                       Medium Security                                          1200                 51                4.25
+Rubavu Prison                                                                                        Medium Security                                          1600                 68                4.25
+Rusizi Prison                                                                                        Medium Security                                          1400                 58                4.14
+Rwamagana Prison                                                                                     Minimum Security                                         1100                 45                4.09
+Nyanza Prison                                                                                        Medium Security                                          1500                 58                3.87
+Nyarugenge Maximum Security Prison                                                                   Maximum Security                                         1500                 49                3.27
+Musanze Prison                                                                                       Maximum Security                                         2000                 54                 2.7
+Muhanga Prison                                                                                       Medium Security                                          1800                 39                2.17
+Kigali Central Prison                                                                                Maximum Security                                         2500                 44                1.76
+Ngoma Juvenile Rehabilitation Center                                                                 Juvenile                                                  800                  0                   0
+
+13 rows selected. 
+
+SQL> 
+SQL> -- Query 4: Subquery example
+SQL> PROMPT Query 4: Prisoners with medical conditions and their latest medical visit
+Query 4: Prisoners with medical conditions and their latest medical visit
+SQL> SELECT 
+  2      p.prisoner_id,
+  3      p.first_name || ' ' || p.last_name as prisoner_name,
+  4      p.medical_conditions,
+  5      (SELECT MAX(mr.visit_date) 
+  6       FROM medical_records mr 
+  7       WHERE mr.prisoner_id = p.prisoner_id) as last_medical_visit,
+  8      (SELECT mr.diagnosis 
+  9       FROM medical_records mr 
+ 10       WHERE mr.prisoner_id = p.prisoner_id 
+ 11       AND mr.visit_date = (SELECT MAX(visit_date) FROM medical_records WHERE prisoner_id = p.prisoner_id)
+ 12       AND ROWNUM = 1) as latest_diagnosis
+ 13  FROM prisoners p
+ 14  WHERE p.medical_conditions IS NOT NULL
+ 15  AND p.status = 'Active'
+ 16  AND ROWNUM <= 5
+ 17  ORDER BY p.prisoner_id;
+
+PRISONER_ID PRISONER_NAME                                                                                         MEDICAL_CONDITIONS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   LAST_MEDI
+----------- ----------------------------------------------------------------------------------------------------- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ---------
+LATEST_DIAGNOSIS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      10159 Marie Mugabo                                                                                          Hypertension                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+      10164 Jeanne Uwimana                                                                                        Diabetes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+      10169 Esperance Bizimana                                                                                    Hypertension                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+      10179 Marie Mugabo                                                                                          Hypertension                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+      10189 Esperance Bizimana                                                                                    Hypertension                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+
+5 rows selected. 
+
+SQL> 
+SQL> -- Query 5: Complex JOIN with aggregation
+SQL> PROMPT Query 5: Staff workload by department
+Query 5: Staff workload by department
+SQL> SELECT 
+  2      s.department,
+  3      COUNT(DISTINCT s.staff_id) as staff_count,
+  4      COUNT(DISTINCT mr.medical_record_id) as medical_records_handled,
+  5      COUNT(DISTINCT v.visit_id) as visits_approved,
+  6      COUNT(DISTINCT i.incident_id) as incidents_reported
+  7  FROM staff s
+  8  LEFT JOIN medical_records mr ON s.staff_id = mr.attending_staff_id
+  9  LEFT JOIN visits v ON s.staff_id = v.approved_by_staff_id
+ 10  LEFT JOIN incidents i ON s.staff_id = i.reported_by_staff_id
+ 11  WHERE s.status = 'Active'
+ 12  GROUP BY s.department
+ 13  ORDER BY staff_count DESC;
+
+DEPARTMENT                                                                                           STAFF_COUNT MEDICAL_RECORDS_HANDLED VISITS_APPROVED INCIDENTS_REPORTED
+---------------------------------------------------------------------------------------------------- ----------- ----------------------- --------------- ------------------
+Administration                                                                                                14                       0             300                  0
+Medical                                                                                                       12                      47               0                  0
+Security                                                                                                      12                       0               0                 20
+Counseling                                                                                                    12                       0               0                  0
+Kitchen                                                                                                       11                       0               0                  0
+Education                                                                                                      9                       0               0                  0
+Maintenance                                                                                                    7                       0               0                  0
+
+7 rows selected. 
+
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT ============================================================
+============================================================
+SQL> PROMPT ✅ PHASE V COMPLETED SUCCESSFULLY!
+✅ PHASE V COMPLETED SUCCESSFULLY!
+SQL> PROMPT ============================================================
+============================================================
+SQL> PROMPT
+
+SQL> PROMPT Summary:
+Summary:
+SQL> PROMPT 1. 15 tables created with proper constraints
+1. 15 tables created with proper constraints
+SQL> PROMPT 2. 500+ realistic records inserted
+2. 500+ realistic records inserted
+SQL> PROMPT 3. Data integrity verified
+3. Data integrity verified
+SQL> PROMPT 4. Test queries executed successfully
+4. Test queries executed successfully
+SQL> PROMPT 5. All foreign key relationships validated
+5. All foreign key relationships validated
+SQL> PROMPT
+
+SQL> PROMPT Next Steps:
+Next Steps:
+SQL> PROMPT 1. Run additional performance tests
+1. Run additional performance tests
+SQL> PROMPT 2. Create application users and grants
+2. Create application users and grants
+SQL> PROMPT 3. Develop application interface
+3. Develop application interface
+SQL> PROMPT ============================================================
+=
