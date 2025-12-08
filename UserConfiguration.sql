@@ -42,8 +42,8 @@ GRANT ALTER USER TO jockebed_admin;
 GRANT DROP USER TO jockebed_admin;
 
 -- Grant unlimited tablespace quota
-ALTER USER jockebed_admin QUOTA UNLIMITED ON pms_data;
-ALTER USER jockebed_admin QUOTA UNLIMITED ON pms_indexes;
+ALTER USER jockebed_admin QUOTA UNLIMITED ON PRISON_DATA_TBS;
+ALTER USER jockebed_admin QUOTA UNLIMITED ON PRISON_INDEX_TBS;
 
 -- Set default and temporary tablespaces
 ALTER USER jockebed_admin DEFAULT TABLESPACE pms_data;
@@ -115,11 +115,11 @@ PROMPT
 
 -- Create Prison Administrator User
 CREATE USER pms_admin IDENTIFIED BY Admin123
-DEFAULT TABLESPACE pms_data
-TEMPORARY TABLESPACE pms_temp
+DEFAULT TABLESPACE PRISON_DATA_TBS  
+TEMPORARY TABLESPACE PRISON_TEMP_TBS
 PROFILE pms_security_profile
-QUOTA UNLIMITED ON pms_data
-QUOTA 100M ON pms_indexes
+QUOTA UNLIMITED ON PRISON_DATA_TBS
+QUOTA 100M ON PRISON_INDEX_TBS
 ACCOUNT UNLOCK;
 
 GRANT pms_admin_role TO pms_admin;
