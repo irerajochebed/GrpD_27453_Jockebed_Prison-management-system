@@ -1,0 +1,600 @@
+-- ============================================================
+-- PHASE V: TABLE IMPLEMENTATION & DATA INSERTION
+-- Prison Management System - COMPLETE SOLUTION
+-- ============================================================
+-- Group: D
+-- Student ID: 27453
+-- Student Name: IRERA Mukawera Jockebed
+-- Database: grpD_27453_jockebed_PrisonManagementSystem_db
+-- ============================================================
+
+SET SERVEROUTPUT ON SIZE UNLIMITED
+SET ECHO ON
+SET FEEDBACK ON
+SET LINESIZE 200
+SET PAGESIZE 100
+
+ALTER SESSION SET CONTAINER = grpD_27453_jockebed_PrisonManagementSystem_db;
+
+PROMPT ============================================================
+PROMPT PHASE V: TABLE IMPLEMENTATION & DATA INSERTION
+PROMPT Prison Management System Database
+PROMPT ============================================================
+
+-- ============================================================
+-- PART A: DROP EXISTING OBJECTS (FOR CLEAN SLATE)
+-- ============================================================
+
+PROMPT
+PROMPT Dropping existing objects if they exist...
+PROMPT
+
+BEGIN
+    -- Drop triggers first
+    FOR rec IN (SELECT trigger_name FROM user_triggers 
+                WHERE trigger_name LIKE 'TRG_%')
+    LOOP
+        EXECUTE IMMEDIATE 'DROP TRIGGER ' || rec.trigger_name;
+        DBMS_OUTPUT.PUT_LINE('Dropped trigger: ' || rec.trigger_name);
+    END LOOP;
+    
+    -- Drop tables
+    FOR rec IN (SELECT table_name FROM user_tables 
+                WHERE table_name IN (
+                    'PROGRAM_ENROLLMENTS', 'PROGRAMS', 'MEDICAL_RECORDS',
+                    'INCIDENT_PRISONERS', 'INCIDENTS', 'VISITS', 'VISITORS',
+                    'STAFF', 'SENTENCES', 'OFFENSES', 'PRISONER_ASSIGNMENTS',
+                    'PRISONERS', 'CELLS', 'BLOCKS', 'PRISONS'
+                )) 
+    LOOP
+        EXECUTE IMMEDIATE 'DROP TABLE ' || rec.table_name || ' CASCADE CONSTRAINTS';
+        DBMS_OUTPUT.PUT_LINE('Dropped table: ' || rec.table_name);
+    END LOOP;
+    
+    -- Drop sequences
+    FOR rec IN (SELECT sequence_name FROM user_sequences WHERE sequence_name LIKE 'SEQ_%')
+    LOOP
+        EXECUTE IMMEDIATE 'DROP SEQUENCE ' || rec.sequence_name;
+        DBMS_OUTPUT.PUT_LINE('Dropped sequence: ' || rec.sequence_name);
+    END LOOP;
+END;
+/
+
+-- ============================================================
+-- PART B: CREATE SEQUENCES
+-- ============================================================
+
+PROMPT
+PROMPT ============================================================
+PROMPT Creating Sequences...
+PROMPT ============================================================
+
+CREATE SEQUENCE seq_prison_id START WITH 1000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_block_id START WITH 2000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_cell_id START WITH 3000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_prisoner_id START WITH 10000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_assignment_id START WITH 5000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_offense_id START WITH 100 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_sentence_id START WITH 6000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_staff_id START WITH 7000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_visitor_id START WITH 8000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_visit_id START WITH 9000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_incident_id START WITH 4000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_incident_prisoner_id START WITH 11000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_medical_record_id START WITH 12000 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_program_id START WITH 200 INCREMENT BY 1 NOCACHE NOCYCLE;
+CREATE SEQUENCE seq_enrollment_id START WITH 13000 INCREMENT BY 1 NOCACHE NOCYCLE;
+
+PROMPT ✅ Sequences created successfully!
+
+-- ============================================================
+-- PART C: CREATE TABLES WITH COMPLETE CONSTRAINTS
+-- ============================================================
+
+PROMPT
+PROMPT ============================================================
+PROMPT Creating Tables...
+PROMPT ============================================================
+
+-- 1. PRISONS
+PROMPT Creating PRISONS table...
+
+CREATE TABLE PRISONS (
+    prison_id NUMBER(10) PRIMARY KEY,
+    prison_name VARCHAR2(100) NOT NULL,
+    prison_type VARCHAR2(50) NOT NULL 
+        CHECK (prison_type IN ('Maximum Security', 'Medium Security', 'Minimum Security', 'Juvenile')),
+    location VARCHAR2(200) NOT NULL,
+    capacity NUMBER(6) NOT NULL CHECK (capacity > 0),
+    warden_name VARCHAR2(100),
+    phone_number VARCHAR2(20),
+    established_date DATE,
+    status VARCHAR2(20) DEFAULT 'Active' 
+        CHECK (status IN ('Active', 'Closed', 'Under Renovation')),
+    created_date DATE DEFAULT SYSDATE,
+    last_updated DATE DEFAULT SYSDATE,
+    CONSTRAINT uk_prison_name UNIQUE (prison_name)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE PRISONS IS 'Prison facilities across the country';
+
+-- 2. BLOCKS
+PROMPT Creating BLOCKS table...
+
+CREATE TABLE BLOCKS (
+    block_id NUMBER(10) PRIMARY KEY,
+    prison_id NUMBER(10) NOT NULL,
+    block_name VARCHAR2(50) NOT NULL,
+    block_type VARCHAR2(50) NOT NULL
+        CHECK (block_type IN ('General', 'High Security', 'Isolation', 'Medical', 'Women', 'Juvenile')),
+    capacity NUMBER(4) NOT NULL CHECK (capacity > 0),
+    current_occupancy NUMBER(4) DEFAULT 0 CHECK (current_occupancy >= 0),
+    status VARCHAR2(20) DEFAULT 'Active' 
+        CHECK (status IN ('Active', 'Inactive', 'Maintenance')),
+    created_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_block_prison FOREIGN KEY (prison_id) REFERENCES PRISONS(prison_id) ON DELETE CASCADE,
+    CONSTRAINT chk_block_occupancy CHECK (current_occupancy <= capacity),
+    CONSTRAINT uk_block_name UNIQUE (prison_id, block_name)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE BLOCKS IS 'Prison blocks within facilities';
+
+-- 3. CELLS
+PROMPT Creating CELLS table...
+
+CREATE TABLE CELLS (
+    cell_id NUMBER(10) PRIMARY KEY,
+    block_id NUMBER(10) NOT NULL,
+    cell_number VARCHAR2(20) NOT NULL,
+    cell_capacity NUMBER(2) NOT NULL CHECK (cell_capacity BETWEEN 1 AND 20),
+    current_occupancy NUMBER(2) DEFAULT 0 CHECK (current_occupancy >= 0),
+    cell_type VARCHAR2(50) NOT NULL
+        CHECK (cell_type IN ('Single', 'Double', 'Dormitory', 'Isolation')),
+    status VARCHAR2(20) DEFAULT 'Available' 
+        CHECK (status IN ('Available', 'Occupied', 'Under Maintenance', 'Reserved')),
+    created_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_cell_block FOREIGN KEY (block_id) REFERENCES BLOCKS(block_id) ON DELETE CASCADE,
+    CONSTRAINT chk_cell_occupancy CHECK (current_occupancy <= cell_capacity),
+    CONSTRAINT uk_cell_number UNIQUE (block_id, cell_number)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE CELLS IS 'Individual cells within blocks';
+
+-- 4. PRISONERS (FIXED - Removed SYSDATE from CHECK constraints)
+PROMPT Creating PRISONERS table...
+
+CREATE TABLE PRISONERS (
+    prisoner_id NUMBER(10) PRIMARY KEY,
+    national_id VARCHAR2(20) NOT NULL,
+    first_name VARCHAR2(50) NOT NULL,
+    last_name VARCHAR2(50) NOT NULL,
+    date_of_birth DATE NOT NULL,
+    gender CHAR(1) NOT NULL CHECK (gender IN ('M', 'F')),
+    nationality VARCHAR2(50) DEFAULT 'Rwandan',
+    blood_group VARCHAR2(5) 
+        CHECK (blood_group IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')),
+    emergency_contact_name VARCHAR2(100),
+    emergency_contact_phone VARCHAR2(20),
+    medical_conditions VARCHAR2(500),
+    admission_date DATE DEFAULT SYSDATE NOT NULL,
+    expected_release_date DATE,
+    actual_release_date DATE,
+    status VARCHAR2(20) DEFAULT 'Active' 
+        CHECK (status IN ('Active', 'Released', 'Transferred', 'Deceased', 'Escaped')),
+    created_date DATE DEFAULT SYSDATE,
+    last_updated DATE DEFAULT SYSDATE,
+    CONSTRAINT uk_prisoner_national_id UNIQUE (national_id),
+    CONSTRAINT chk_release_dates CHECK (expected_release_date IS NULL OR expected_release_date > admission_date)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE PRISONERS IS 'Personal information of all prisoners';
+
+-- 5. PRISONER_ASSIGNMENTS
+PROMPT Creating PRISONER_ASSIGNMENTS table...
+
+CREATE TABLE PRISONER_ASSIGNMENTS (
+    assignment_id NUMBER(10) PRIMARY KEY,
+    prisoner_id NUMBER(10) NOT NULL,
+    prison_id NUMBER(10) NOT NULL,
+    cell_id NUMBER(10),
+    assignment_date DATE DEFAULT SYSDATE NOT NULL,
+    assignment_end_date DATE,
+    assignment_reason VARCHAR2(200),
+    status VARCHAR2(20) DEFAULT 'Active' 
+        CHECK (status IN ('Active', 'Completed', 'Transferred')),
+    created_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_assignment_prisoner FOREIGN KEY (prisoner_id) REFERENCES PRISONERS(prisoner_id) ON DELETE CASCADE,
+    CONSTRAINT fk_assignment_prison FOREIGN KEY (prison_id) REFERENCES PRISONS(prison_id),
+    CONSTRAINT fk_assignment_cell FOREIGN KEY (cell_id) REFERENCES CELLS(cell_id),
+    CONSTRAINT chk_assignment_dates CHECK (assignment_end_date IS NULL OR assignment_end_date >= assignment_date)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE PRISONER_ASSIGNMENTS IS 'Tracks prisoner assignments to prisons and cells';
+
+-- 6. OFFENSES
+PROMPT Creating OFFENSES table...
+
+CREATE TABLE OFFENSES (
+    offense_id NUMBER(10) PRIMARY KEY,
+    offense_name VARCHAR2(100) NOT NULL,
+    offense_category VARCHAR2(50) NOT NULL
+        CHECK (offense_category IN ('Violent', 'Non-Violent', 'Drug-Related', 'White Collar', 'Cyber Crime', 'Traffic', 'Other')),
+    severity_level VARCHAR2(20) NOT NULL
+        CHECK (severity_level IN ('Minor', 'Moderate', 'Serious', 'Grave')),
+    description VARCHAR2(500),
+    created_date DATE DEFAULT SYSDATE,
+    CONSTRAINT uk_offense_name UNIQUE (offense_name)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE OFFENSES IS 'Catalog of criminal offenses';
+
+-- 7. SENTENCES (FIXED)
+PROMPT Creating SENTENCES table...
+
+CREATE TABLE SENTENCES (
+    sentence_id NUMBER(10) PRIMARY KEY,
+    prisoner_id NUMBER(10) NOT NULL,
+    offense_id NUMBER(10) NOT NULL,
+    case_number VARCHAR2(50) NOT NULL,
+    court_name VARCHAR2(100) NOT NULL,
+    judge_name VARCHAR2(100),
+    conviction_date DATE NOT NULL,
+    sentence_type VARCHAR2(50) NOT NULL
+        CHECK (sentence_type IN ('Imprisonment', 'Life Sentence', 'Death Penalty', 'Community Service', 'Probation')),
+    sentence_duration_years NUMBER(3),
+    sentence_duration_months NUMBER(2),
+    sentence_duration_days NUMBER(3),
+    fine_amount NUMBER(12,2),
+    sentence_start_date DATE NOT NULL,
+    sentence_end_date DATE,
+    parole_eligible_date DATE,
+    status VARCHAR2(20) DEFAULT 'Active' 
+        CHECK (status IN ('Active', 'Completed', 'Appealed', 'Reduced', 'Pardoned')),
+    remarks VARCHAR2(500),
+    created_date DATE DEFAULT SYSDATE,
+    last_updated DATE DEFAULT SYSDATE,
+    CONSTRAINT uk_case_number UNIQUE (case_number),
+    CONSTRAINT fk_sentence_prisoner FOREIGN KEY (prisoner_id) REFERENCES PRISONERS(prisoner_id) ON DELETE CASCADE,
+    CONSTRAINT fk_sentence_offense FOREIGN KEY (offense_id) REFERENCES OFFENSES(offense_id),
+    CONSTRAINT chk_sentence_dates CHECK (sentence_end_date IS NULL OR sentence_end_date >= sentence_start_date)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE SENTENCES IS 'Criminal sentences assigned to prisoners';
+
+-- 8. STAFF (FIXED)
+PROMPT Creating STAFF table...
+
+CREATE TABLE STAFF (
+    staff_id NUMBER(10) PRIMARY KEY,
+    employee_number VARCHAR2(20) NOT NULL,
+    national_id VARCHAR2(20) NOT NULL,
+    first_name VARCHAR2(50) NOT NULL,
+    last_name VARCHAR2(50) NOT NULL,
+    date_of_birth DATE NOT NULL,
+    gender CHAR(1) NOT NULL CHECK (gender IN ('M', 'F')),
+    phone_number VARCHAR2(20),
+    email VARCHAR2(100),
+    position VARCHAR2(100) NOT NULL,
+    department VARCHAR2(100) NOT NULL
+        CHECK (department IN ('Security', 'Administration', 'Medical', 'Kitchen', 'Maintenance', 'Education', 'Counseling')),
+    hire_date DATE DEFAULT SYSDATE NOT NULL,
+    salary NUMBER(10,2),
+    prison_id NUMBER(10),
+    supervisor_id NUMBER(10),
+    status VARCHAR2(20) DEFAULT 'Active' 
+        CHECK (status IN ('Active', 'On Leave', 'Suspended', 'Resigned', 'Retired', 'Terminated')),
+    created_date DATE DEFAULT SYSDATE,
+    last_updated DATE DEFAULT SYSDATE,
+    CONSTRAINT uk_employee_number UNIQUE (employee_number),
+    CONSTRAINT uk_staff_national_id UNIQUE (national_id),
+    CONSTRAINT uk_staff_email UNIQUE (email),
+    CONSTRAINT fk_staff_prison FOREIGN KEY (prison_id) REFERENCES PRISONS(prison_id),
+    CONSTRAINT fk_staff_supervisor FOREIGN KEY (supervisor_id) REFERENCES STAFF(staff_id),
+    CONSTRAINT chk_staff_age CHECK (MONTHS_BETWEEN(hire_date, date_of_birth) >= 216),
+    CONSTRAINT chk_staff_salary CHECK (salary IS NULL OR salary > 0)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE STAFF IS 'Prison staff and employees';
+
+-- 9. VISITORS
+PROMPT Creating VISITORS table...
+
+CREATE TABLE VISITORS (
+    visitor_id NUMBER(10) PRIMARY KEY,
+    national_id VARCHAR2(20),
+    first_name VARCHAR2(50) NOT NULL,
+    last_name VARCHAR2(50) NOT NULL,
+    phone_number VARCHAR2(20),
+    address VARCHAR2(200),
+    relationship_to_prisoner VARCHAR2(50),
+    status VARCHAR2(20) DEFAULT 'Approved' 
+        CHECK (status IN ('Approved', 'Rejected', 'Banned', 'Under Review')),
+    created_date DATE DEFAULT SYSDATE
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE VISITORS IS 'Registered visitors';
+
+-- 10. VISITS
+PROMPT Creating VISITS table...
+
+CREATE TABLE VISITS (
+    visit_id NUMBER(10) PRIMARY KEY,
+    prisoner_id NUMBER(10) NOT NULL,
+    visitor_id NUMBER(10) NOT NULL,
+    visit_date DATE NOT NULL,
+    visit_time_start TIMESTAMP NOT NULL,
+    visit_time_end TIMESTAMP,
+    visit_type VARCHAR2(50) NOT NULL
+        CHECK (visit_type IN ('Family', 'Legal', 'Social', 'Official')),
+    approved_by_staff_id NUMBER(10),
+    purpose VARCHAR2(200),
+    notes VARCHAR2(500),
+    status VARCHAR2(20) DEFAULT 'Scheduled' 
+        CHECK (status IN ('Scheduled', 'Completed', 'Cancelled', 'No Show')),
+    created_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_visit_prisoner FOREIGN KEY (prisoner_id) REFERENCES PRISONERS(prisoner_id) ON DELETE CASCADE,
+    CONSTRAINT fk_visit_visitor FOREIGN KEY (visitor_id) REFERENCES VISITORS(visitor_id),
+    CONSTRAINT fk_visit_staff FOREIGN KEY (approved_by_staff_id) REFERENCES STAFF(staff_id),
+    CONSTRAINT chk_visit_times CHECK (visit_time_end IS NULL OR visit_time_end > visit_time_start)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE VISITS IS 'Record of all prison visits';
+
+-- 11. INCIDENTS
+PROMPT Creating INCIDENTS table...
+
+CREATE TABLE INCIDENTS (
+    incident_id NUMBER(10) PRIMARY KEY,
+    incident_type VARCHAR2(50) NOT NULL
+        CHECK (incident_type IN ('Fight', 'Contraband', 'Escape Attempt', 'Medical Emergency', 'Property Damage', 'Disturbance', 'Other')),
+    severity VARCHAR2(20) NOT NULL
+        CHECK (severity IN ('Low', 'Medium', 'High', 'Critical')),
+    incident_date TIMESTAMP NOT NULL,
+    location VARCHAR2(200) NOT NULL,
+    prison_id NUMBER(10) NOT NULL,
+    reported_by_staff_id NUMBER(10),
+    description VARCHAR2(1000) NOT NULL,
+    action_taken VARCHAR2(1000),
+    status VARCHAR2(20) DEFAULT 'Reported' 
+        CHECK (status IN ('Reported', 'Under Investigation', 'Resolved', 'Closed')),
+    created_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_incident_prison FOREIGN KEY (prison_id) REFERENCES PRISONS(prison_id),
+    CONSTRAINT fk_incident_staff FOREIGN KEY (reported_by_staff_id) REFERENCES STAFF(staff_id)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE INCIDENTS IS 'Security incidents and events';
+
+-- 12. INCIDENT_PRISONERS
+PROMPT Creating INCIDENT_PRISONERS table...
+
+CREATE TABLE INCIDENT_PRISONERS (
+    incident_prisoner_id NUMBER(10) PRIMARY KEY,
+    incident_id NUMBER(10) NOT NULL,
+    prisoner_id NUMBER(10) NOT NULL,
+    involvement_type VARCHAR2(50) NOT NULL
+        CHECK (involvement_type IN ('Perpetrator', 'Victim', 'Witness', 'Suspect')),
+    disciplinary_action VARCHAR2(500),
+    created_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_ip_incident FOREIGN KEY (incident_id) REFERENCES INCIDENTS(incident_id) ON DELETE CASCADE,
+    CONSTRAINT fk_ip_prisoner FOREIGN KEY (prisoner_id) REFERENCES PRISONERS(prisoner_id) ON DELETE CASCADE,
+    CONSTRAINT uk_incident_prisoner UNIQUE (incident_id, prisoner_id)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE INCIDENT_PRISONERS IS 'Links prisoners to incidents';
+
+-- 13. MEDICAL_RECORDS
+PROMPT Creating MEDICAL_RECORDS table...
+
+CREATE TABLE MEDICAL_RECORDS (
+    medical_record_id NUMBER(10) PRIMARY KEY,
+    prisoner_id NUMBER(10) NOT NULL,
+    visit_date DATE DEFAULT SYSDATE NOT NULL,
+    diagnosis VARCHAR2(500),
+    treatment VARCHAR2(1000),
+    prescribed_medication VARCHAR2(500),
+    attending_staff_id NUMBER(10),
+    next_appointment_date DATE,
+    notes VARCHAR2(1000),
+    created_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_medical_prisoner FOREIGN KEY (prisoner_id) REFERENCES PRISONERS(prisoner_id) ON DELETE CASCADE,
+    CONSTRAINT fk_medical_staff FOREIGN KEY (attending_staff_id) REFERENCES STAFF(staff_id),
+    CONSTRAINT chk_next_appointment CHECK (next_appointment_date IS NULL OR next_appointment_date >= visit_date)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE MEDICAL_RECORDS IS 'Prisoner medical history';
+
+-- 14. PROGRAMS
+PROMPT Creating PROGRAMS table...
+
+CREATE TABLE PROGRAMS (
+    program_id NUMBER(10) PRIMARY KEY,
+    program_name VARCHAR2(100) NOT NULL,
+    program_type VARCHAR2(50) NOT NULL
+        CHECK (program_type IN ('Education', 'Vocational Training', 'Counseling', 'Substance Abuse', 'Anger Management', 'Life Skills')),
+    description VARCHAR2(500),
+    duration_weeks NUMBER(3),
+    instructor_name VARCHAR2(100),
+    capacity NUMBER(3),
+    prison_id NUMBER(10),
+    status VARCHAR2(20) DEFAULT 'Active' 
+        CHECK (status IN ('Active', 'Inactive', 'Completed')),
+    created_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_program_prison FOREIGN KEY (prison_id) REFERENCES PRISONS(prison_id),
+    CONSTRAINT uk_program_name UNIQUE (program_name, prison_id)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE PROGRAMS IS 'Rehabilitation and education programs';
+
+-- 15. PROGRAM_ENROLLMENTS
+PROMPT Creating PROGRAM_ENROLLMENTS table...
+
+CREATE TABLE PROGRAM_ENROLLMENTS (
+    enrollment_id NUMBER(10) PRIMARY KEY,
+    prisoner_id NUMBER(10) NOT NULL,
+    program_id NUMBER(10) NOT NULL,
+    enrollment_date DATE DEFAULT SYSDATE NOT NULL,
+    completion_date DATE,
+    completion_status VARCHAR2(20) NOT NULL
+        CHECK (completion_status IN ('Enrolled', 'In Progress', 'Completed', 'Dropped', 'Failed')),
+    performance_rating VARCHAR2(20) 
+        CHECK (performance_rating IN ('Excellent', 'Good', 'Satisfactory', 'Poor', 'N/A')),
+    notes VARCHAR2(500),
+    created_date DATE DEFAULT SYSDATE,
+    CONSTRAINT fk_enrollment_prisoner FOREIGN KEY (prisoner_id) REFERENCES PRISONERS(prisoner_id) ON DELETE CASCADE,
+    CONSTRAINT fk_enrollment_program FOREIGN KEY (program_id) REFERENCES PROGRAMS(program_id),
+    CONSTRAINT uk_enrollment UNIQUE (prisoner_id, program_id, enrollment_date),
+    CONSTRAINT chk_completion CHECK (completion_date IS NULL OR completion_date >= enrollment_date)
+) TABLESPACE PRISON_DATA_TBS;
+
+COMMENT ON TABLE PROGRAM_ENROLLMENTS IS 'Prisoner program participation';
+
+PROMPT ✅ All 15 tables created successfully!
+
+-- ============================================================
+-- PART D: CREATE INDEXES FOR PERFORMANCE
+-- ============================================================
+
+PROMPT
+PROMPT ============================================================
+PROMPT Creating Indexes...
+PROMPT ============================================================
+
+-- Foreign Key Indexes
+CREATE INDEX idx_block_prison ON BLOCKS(prison_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_cell_block ON CELLS(block_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_assignment_prisoner ON PRISONER_ASSIGNMENTS(prisoner_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_assignment_prison ON PRISONER_ASSIGNMENTS(prison_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_assignment_cell ON PRISONER_ASSIGNMENTS(cell_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_sentence_prisoner ON SENTENCES(prisoner_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_sentence_offense ON SENTENCES(offense_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_staff_prison ON STAFF(prison_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_staff_supervisor ON STAFF(supervisor_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_visit_prisoner ON VISITS(prisoner_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_visit_visitor ON VISITS(visitor_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_visit_staff ON VISITS(approved_by_staff_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_incident_prison ON INCIDENTS(prison_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_incident_staff ON INCIDENTS(reported_by_staff_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_ip_incident ON INCIDENT_PRISONERS(incident_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_ip_prisoner ON INCIDENT_PRISONERS(prisoner_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_medical_prisoner ON MEDICAL_RECORDS(prisoner_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_medical_staff ON MEDICAL_RECORDS(attending_staff_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_program_prison ON PROGRAMS(prison_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_enrollment_prisoner ON PROGRAM_ENROLLMENTS(prisoner_id) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_enrollment_program ON PROGRAM_ENROLLMENTS(program_id) TABLESPACE PRISON_INDEX_TBS;
+
+-- Query Performance Indexes
+CREATE INDEX idx_prisoner_status ON PRISONERS(status) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_prisoner_admission ON PRISONERS(admission_date) TABLESPACE PRISON_INDEX_TBS;
+-- Note: idx_prisoner_national_id skipped - UNIQUE constraint already creates index
+CREATE INDEX idx_sentence_dates ON SENTENCES(sentence_start_date, sentence_end_date) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_visit_date ON VISITS(visit_date) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_incident_date ON INCIDENTS(incident_date) TABLESPACE PRISON_INDEX_TBS;
+CREATE INDEX idx_staff_status ON STAFF(status) TABLESPACE PRISON_INDEX_TBS;
+-- Note: idx_staff_email skipped - UNIQUE constraint already creates index
+
+PROMPT ✅ All indexes created successfully!
+
+-- ============================================================
+-- PART E: CREATE TRIGGERS FOR DATE VALIDATION
+-- ============================================================
+
+PROMPT
+PROMPT ============================================================
+PROMPT Creating Validation Triggers...
+PROMPT ============================================================
+PROMPT
+PROMPT Note: Triggers skipped due to container database permission restrictions.
+PROMPT Date validation will be enforced at application level or during data insertion.
+PROMPT Alternative: Run triggers as jockebed_admin user if permissions allow.
+PROMPT
+
+-- Note: If triggers fail with ORA-04089, this is due to container database restrictions
+-- The data insertion script includes validation logic to ensure data quality
+
+/*
+-- Uncomment and run these if you have proper trigger permissions:
+
+CREATE OR REPLACE TRIGGER trg_validate_prisoner_dates
+BEFORE INSERT OR UPDATE ON PRISONERS
+FOR EACH ROW
+BEGIN
+    IF :NEW.date_of_birth >= SYSDATE THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Date of birth must be in the past');
+    END IF;
+    IF MONTHS_BETWEEN(SYSDATE, :NEW.date_of_birth) < 180 THEN
+        RAISE_APPLICATION_ERROR(-20002, 'Prisoner must be at least 15 years old');
+    END IF;
+END;
+/
+
+CREATE OR REPLACE TRIGGER trg_validate_staff_dates
+BEFORE INSERT OR UPDATE ON STAFF
+FOR EACH ROW
+BEGIN
+    IF :NEW.date_of_birth >= SYSDATE THEN
+        RAISE_APPLICATION_ERROR(-20003, 'Date of birth must be in the past');
+    END IF;
+    IF MONTHS_BETWEEN(:NEW.hire_date, :NEW.date_of_birth) < 216 THEN
+        RAISE_APPLICATION_ERROR(-20004, 'Staff must be at least 18 years old at hire date');
+    END IF;
+END;
+/
+
+CREATE OR REPLACE TRIGGER trg_validate_sentence_dates
+BEFORE INSERT OR UPDATE ON SENTENCES
+FOR EACH ROW
+BEGIN
+    IF :NEW.conviction_date > SYSDATE THEN
+        RAISE_APPLICATION_ERROR(-20005, 'Conviction date cannot be in the future');
+    END IF;
+END;
+/
+
+CREATE OR REPLACE TRIGGER trg_prisoner_update_timestamp
+BEFORE UPDATE ON PRISONERS
+FOR EACH ROW
+BEGIN
+    :NEW.last_updated := SYSDATE;
+END;
+/
+
+CREATE OR REPLACE TRIGGER trg_staff_update_timestamp
+BEFORE UPDATE ON STAFF
+FOR EACH ROW
+BEGIN
+    :NEW.last_updated := SYSDATE;
+END;
+/
+
+CREATE OR REPLACE TRIGGER trg_sentence_update_timestamp
+BEFORE UPDATE ON SENTENCES
+FOR EACH ROW
+BEGIN
+    :NEW.last_updated := SYSDATE;
+END;
+/
+
+CREATE OR REPLACE TRIGGER trg_prison_update_timestamp
+BEFORE UPDATE ON PRISONS
+FOR EACH ROW
+BEGIN
+    :NEW.last_updated := SYSDATE;
+END;
+/
+*/
+
+PROMPT ✅ Trigger section completed (commented out due to permission restrictions)
+
+PROMPT
+PROMPT ============================================================
+PROMPT PART C-E COMPLETE: Database Structure Created
+PROMPT ============================================================
+PROMPT - 15 Tables created with all constraints
+PROMPT - 26 Indexes created for performance (2 skipped - already indexed by UNIQUE)
+PROMPT - Triggers commented out (container DB permission restrictions)
+PROMPT - All foreign keys enforced
+PROMPT - Check constraints validated
+PROMPT ============================================================
+
+-- Save creation script completion
+SPOOL OFF
