@@ -1,0 +1,1869 @@
+SQL> SET FEEDBACK ON
+SQL> SET LINESIZE 200
+SQL> 
+SQL> ALTER SESSION SET CONTAINER = grpD_27453_jockebed_PrisonManagementSystem_db;
+
+Session altered.
+
+SQL> 
+SQL> PROMPT ============================================================
+============================================================
+SQL> PROMPT PHASE VI: DATABASE INTERACTION & TRANSACTIONS
+PHASE VI: DATABASE INTERACTION 2
+SQL> PROMPT PL/SQL Procedures, Functions, and Packages Implementation
+PL/SQL Procedures, Functions, and Packages Implementation
+SQL> PROMPT ============================================================
+============================================================
+SQL> 
+SQL> -- ============================================================
+SQL> -- PART 1: CUSTOM EXCEPTIONS AND ERROR HANDLING
+SQL> -- ============================================================
+SQL> 
+SQL> PROMPT Creating custom exceptions...
+Creating custom exceptions...
+SQL> 
+SQL> DECLARE
+  2      -- Custom exceptions for prison management system
+  3      invalid_prisoner_data EXCEPTION;
+  4      prison_capacity_exceeded EXCEPTION;
+  5      sentence_duration_error EXCEPTION;
+  6      duplicate_prisoner_exception EXCEPTION;
+  7      insufficient_privileges EXCEPTION;
+  8      medical_emergency_exception EXCEPTION;
+  9      invalid_assignment_exception EXCEPTION;
+ 10  
+ 11      -- PRAGMA to associate error numbers
+ 12      PRAGMA EXCEPTION_INIT(invalid_prisoner_data, -20001);
+ 13      PRAGMA EXCEPTION_INIT(prison_capacity_exceeded, -20002);
+ 14      PRAGMA EXCEPTION_INIT(sentence_duration_error, -20003);
+ 15      PRAGMA EXCEPTION_INIT(duplicate_prisoner_exception, -20004);
+ 16      PRAGMA EXCEPTION_INIT(insufficient_privileges, -20005);
+ 17      PRAGMA EXCEPTION_INIT(medical_emergency_exception, -20006);
+ 18      PRAGMA EXCEPTION_INIT(invalid_assignment_exception, -20007);
+ 19  BEGIN
+ 20      DBMS_OUTPUT.PUT_LINE('✅ Custom exceptions defined');
+ 21  EXCEPTION
+ 22      WHEN OTHERS THEN
+ 23          DBMS_OUTPUT.PUT_LINE('Error defining exceptions: ' || SQLERRM);
+ 24  END;
+ 25  /
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> -- ============================================================
+SQL> -- PART 2: FUNCTIONS (Minimum 3-5)
+SQL> -- ============================================================
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT Creating Functions...
+Creating Functions...
+SQL> PROMPT ============================
+============================
+SQL> 
+SQL> -- Function 1: Calculate Prisoner Age
+SQL> CREATE OR REPLACE FUNCTION calculate_prisoner_age(
+  2      p_prisoner_id IN NUMBER
+  3  ) RETURN NUMBER
+  4  IS
+  5      v_dob DATE;
+  6      v_age NUMBER;
+  7  BEGIN
+  8      -- Get date of birth
+  9      SELECT date_of_birth INTO v_dob
+ 10      FROM prisoners
+ 11      WHERE prisoner_id = p_prisoner_id;
+ 12  
+ 13      -- Calculate age in years
+ 14      v_age := TRUNC(MONTHS_BETWEEN(SYSDATE, v_dob) / 12);
+ 15  
+ 16      RETURN v_age;
+ 17  EXCEPTION
+ 18      WHEN NO_DATA_FOUND THEN
+ 19          RAISE_APPLICATION_ERROR(-20001, 'Prisoner ID ' || p_prisoner_id || ' not found');
+ 20          RETURN NULL;
+ 21      WHEN OTHERS THEN
+ 22          RAISE_APPLICATION_ERROR(-20002, 'Error calculating age: ' || SQLERRM);
+ 23          RETURN NULL;
+ 24  END calculate_prisoner_age;
+ 25  /
+
+Function CALCULATE_PRISONER_AGE compiled
+
+SQL> 
+SQL> -- Function 2: Validate National ID
+SQL> CREATE OR REPLACE FUNCTION validate_national_id(
+  2      p_national_id IN VARCHAR2
+  3  ) RETURN VARCHAR2
+  4  IS
+  5      v_is_valid VARCHAR2(1) := 'N';
+  6  BEGIN
+  7      -- Check if national ID is not null and follows basic format
+  8      IF p_national_id IS NOT NULL AND LENGTH(p_national_id) = 13 THEN
+  9          -- Check if it's numeric (except first character can be letter)
+ 10          IF REGEXP_LIKE(p_national_id, '^[0-9]{13}$') THEN
+ 11              v_is_valid := 'Y';
+ 12          END IF;
+ 13      END IF;
+ 14  
+ 15      RETURN v_is_valid;
+ 16  EXCEPTION
+ 17      WHEN OTHERS THEN
+ 18          RETURN 'E'; -- Error
+ 19  END validate_national_id;
+ 20  /
+
+Function VALIDATE_NATIONAL_ID compiled
+
+SQL> 
+SQL> -- Function 3: Calculate Remaining Sentence Days
+SQL> CREATE OR REPLACE FUNCTION calculate_remaining_sentence(
+  2      p_prisoner_id IN NUMBER
+  3  ) RETURN NUMBER
+  4  IS
+  5      v_sentence_end DATE;
+  6      v_remaining_days NUMBER;
+  7      v_actual_release DATE;
+  8  BEGIN
+  9      -- Get actual release date if exists
+ 10      SELECT actual_release_date INTO v_actual_release
+ 11      FROM prisoners
+ 12      WHERE prisoner_id = p_prisoner_id;
+ 13  
+ 14      IF v_actual_release IS NOT NULL THEN
+ 15          -- Prisoner already released
+ 16          RETURN 0;
+ 17      END IF;
+ 18  
+ 19      -- Get latest sentence end date
+ 20      SELECT MAX(sentence_end_date) INTO v_sentence_end
+ 21      FROM sentences
+ 22      WHERE prisoner_id = p_prisoner_id
+ 23      AND status = 'Active';
+ 24  
+ 25      IF v_sentence_end IS NULL THEN
+ 26          RAISE_APPLICATION_ERROR(-20003, 'No active sentence found for prisoner ' || p_prisoner_id);
+ 27      END IF;
+ 28  
+ 29      -- Calculate remaining days
+ 30      v_remaining_days := GREATEST(v_sentence_end - SYSDATE, 0);
+ 31  
+ 32      RETURN TRUNC(v_remaining_days);
+ 33  EXCEPTION
+ 34      WHEN NO_DATA_FOUND THEN
+ 35          RAISE_APPLICATION_ERROR(-20004, 'Prisoner ID ' || p_prisoner_id || ' not found');
+ 36          RETURN NULL;
+ 37      WHEN OTHERS THEN
+ 38          RAISE_APPLICATION_ERROR(-20005, 'Error calculating remaining sentence: ' || SQLERRM);
+ 39          RETURN NULL;
+ 40  END calculate_remaining_sentence;
+ 41  /
+
+Function CALCULATE_REMAINING_SENTENCE compiled
+
+SQL> 
+SQL> -- Function 4: Get Prison Utilization Percentage
+SQL> CREATE OR REPLACE FUNCTION get_prison_utilization(
+  2      p_prison_id IN NUMBER
+  3  ) RETURN NUMBER
+  4  IS
+  5      v_capacity NUMBER;
+  6      v_current_occupancy NUMBER;
+  7      v_utilization NUMBER;
+  8  BEGIN
+  9      -- Get prison capacity
+ 10      SELECT capacity INTO v_capacity
+ 11      FROM prisons
+ 12      WHERE prison_id = p_prison_id;
+ 13  
+ 14      -- Count active prisoner assignments in this prison
+ 15      SELECT COUNT(DISTINCT pa.prisoner_id) INTO v_current_occupancy
+ 16      FROM prisoner_assignments pa
+ 17      WHERE pa.prison_id = p_prison_id
+ 18      AND pa.status = 'Active';
+ 19  
+ 20      -- Calculate utilization percentage
+ 21      v_utilization := (v_current_occupancy / v_capacity) * 100;
+ 22  
+ 23      RETURN ROUND(v_utilization, 2);
+ 24  EXCEPTION
+ 25      WHEN NO_DATA_FOUND THEN
+ 26          RAISE_APPLICATION_ERROR(-20006, 'Prison ID ' || p_prison_id || ' not found');
+ 27          RETURN NULL;
+ 28      WHEN ZERO_DIVIDE THEN
+ 29          RETURN 0;
+ 30      WHEN OTHERS THEN
+ 31          RAISE_APPLICATION_ERROR(-20007, 'Error calculating utilization: ' || SQLERRM);
+ 32          RETURN NULL;
+ 33  END get_prison_utilization;
+ 34  /
+
+Function GET_PRISON_UTILIZATION compiled
+
+SQL> 
+SQL> -- Function 5: Lookup Prisoner Information
+SQL> CREATE OR REPLACE FUNCTION get_prisoner_info(
+  2      p_prisoner_id IN NUMBER
+  3  ) RETURN VARCHAR2
+  4  IS
+  5      v_prisoner_info VARCHAR2(1000);
+  6      v_prisoner_rec prisoners%ROWTYPE;
+  7      v_sentence_rec sentences%ROWTYPE;
+  8      v_offense_rec offenses%ROWTYPE;
+  9  BEGIN
+ 10      -- Get prisoner details
+ 11      SELECT * INTO v_prisoner_rec
+ 12      FROM prisoners
+ 13      WHERE prisoner_id = p_prisoner_id;
+ 14  
+ 15      -- Get latest sentence and offense
+ 16      BEGIN
+ 17          SELECT s.* INTO v_sentence_rec
+ 18          FROM sentences s
+ 19          WHERE s.prisoner_id = p_prisoner_id
+ 20          AND s.status = 'Active'
+ 21          AND ROWNUM = 1
+ 22          ORDER BY s.sentence_start_date DESC;
+ 23  
+ 24          SELECT o.* INTO v_offense_rec
+ 25          FROM offenses o
+ 26          WHERE o.offense_id = v_sentence_rec.offense_id;
+ 27  
+ 28          v_prisoner_info := 'Name: ' || v_prisoner_rec.first_name || ' ' || v_prisoner_rec.last_name ||
+ 29                            ', Age: ' || calculate_prisoner_age(p_prisoner_id) ||
+ 30                            ', Offense: ' || v_offense_rec.offense_name ||
+ 31                            ', Sentence: ' || v_sentence_rec.sentence_duration_years || ' years' ||
+ 32                            ', Status: ' || v_prisoner_rec.status;
+ 33      EXCEPTION
+ 34          WHEN NO_DATA_FOUND THEN
+ 35              v_prisoner_info := 'Name: ' || v_prisoner_rec.first_name || ' ' || v_prisoner_rec.last_name ||
+ 36                                ', Age: ' || calculate_prisoner_age(p_prisoner_id) ||
+ 37                                ', Status: ' || v_prisoner_rec.status || ' (No active sentence)';
+ 38      END;
+ 39  
+ 40      RETURN v_prisoner_info;
+ 41  EXCEPTION
+ 42      WHEN NO_DATA_FOUND THEN
+ 43          RAISE_APPLICATION_ERROR(-20008, 'Prisoner ID ' || p_prisoner_id || ' not found');
+ 44          RETURN NULL;
+ 45      WHEN OTHERS THEN
+ 46          RAISE_APPLICATION_ERROR(-20009, 'Error getting prisoner info: ' || SQLERRM);
+ 47          RETURN NULL;
+ 48  END get_prisoner_info;
+ 49  /
+
+Function GET_PRISONER_INFO compiled
+
+SQL> 
+SQL> PROMPT ✅ 5 Functions created successfully!
+✅ 5 Functions created successfully!
+SQL> 
+SQL> -- ============================================================
+SQL> -- PART 3: PROCEDURES (Minimum 3-5)
+SQL> -- ============================================================
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT Creating Procedures...
+Creating Procedures...
+SQL> PROMPT ============================
+============================
+SQL> 
+SQL> -- Procedure 1: Add New Prisoner with Validation
+SQL> CREATE OR REPLACE PROCEDURE add_new_prisoner(
+  2      p_national_id      IN VARCHAR2,
+  3      p_first_name       IN VARCHAR2,
+  4      p_last_name        IN VARCHAR2,
+  5      p_date_of_birth    IN DATE,
+  6      p_gender           IN CHAR,
+  7      p_offense_id       IN NUMBER,
+  8      p_court_name       IN VARCHAR2,
+  9      p_sentence_years   IN NUMBER,
+ 10      p_sentence_months  IN NUMBER DEFAULT 0,
+ 11      p_sentence_days    IN NUMBER DEFAULT 0,
+ 12      p_prison_id        IN NUMBER,
+ 13      p_cell_id          IN NUMBER DEFAULT NULL,
+ 14      p_out_prisoner_id  OUT NUMBER,
+ 15      p_out_assignment_id OUT NUMBER,
+ 16      p_out_sentence_id  OUT NUMBER
+ 17  )
+ 18  IS
+ 19      v_prisoner_id NUMBER;
+ 20      v_assignment_id NUMBER;
+ 21      v_sentence_id NUMBER;
+ 22      v_prison_capacity NUMBER;
+ 23      v_current_occupancy NUMBER;
+ 24      v_age NUMBER;
+ 25  BEGIN
+ 26      -- Validate national ID
+ 27      IF validate_national_id(p_national_id) != 'Y' THEN
+ 28          RAISE_APPLICATION_ERROR(-20010, 'Invalid national ID format');
+ 29      END IF;
+ 30  
+ 31      -- Calculate age
+ 32      v_age := TRUNC(MONTHS_BETWEEN(SYSDATE, p_date_of_birth) / 12);
+ 33      IF v_age < 15 THEN
+ 34          RAISE_APPLICATION_ERROR(-20011, 'Prisoner must be at least 15 years old');
+ 35      END IF;
+ 36  
+ 37      -- Check prison capacity
+ 38      SELECT capacity, 
+ 39             (SELECT COUNT(DISTINCT prisoner_id) 
+ 40              FROM prisoner_assignments 
+ 41              WHERE prison_id = p_prison_id 
+ 42              AND status = 'Active') 
+ 43      INTO v_prison_capacity, v_current_occupancy
+ 44      FROM prisons
+ 45      WHERE prison_id = p_prison_id
+ 46      AND status = 'Active';
+ 47  
+ 48      IF v_current_occupancy >= v_prison_capacity THEN
+ 49          RAISE_APPLICATION_ERROR(-20012, 'Prison is at full capacity');
+ 50      END IF;
+ 51  
+ 52      -- Check cell availability if specified
+ 53      IF p_cell_id IS NOT NULL THEN
+ 54          DECLARE
+ 55              v_cell_capacity NUMBER;
+ 56              v_cell_occupancy NUMBER;
+ 57          BEGIN
+ 58              SELECT cell_capacity, current_occupancy 
+ 59              INTO v_cell_capacity, v_cell_occupancy
+ 60              FROM cells
+ 61              WHERE cell_id = p_cell_id
+ 62              AND status IN ('Available', 'Occupied');
+ 63  
+ 64              IF v_cell_occupancy >= v_cell_capacity THEN
+ 65                  RAISE_APPLICATION_ERROR(-20013, 'Cell is at full capacity');
+ 66              END IF;
+ 67          EXCEPTION
+ 68              WHEN NO_DATA_FOUND THEN
+ 69                  RAISE_APPLICATION_ERROR(-20014, 'Invalid cell ID or cell not available');
+ 70          END;
+ 71      END IF;
+ 72  
+ 73      -- Insert prisoner
+ 74      INSERT INTO prisoners (
+ 75          prisoner_id, national_id, first_name, last_name, date_of_birth, gender,
+ 76          admission_date, status
+ 77      ) VALUES (
+ 78          seq_prisoner_id.NEXTVAL, p_national_id, p_first_name, p_last_name, 
+ 79          p_date_of_birth, p_gender, SYSDATE, 'Active'
+ 80      )
+ 81      RETURNING prisoner_id INTO v_prisoner_id;
+ 82  
+ 83      -- Insert sentence
+ 84      INSERT INTO sentences (
+ 85          sentence_id, prisoner_id, offense_id, case_number, court_name,
+ 86          conviction_date, sentence_type, sentence_duration_years,
+ 87          sentence_duration_months, sentence_duration_days,
+ 88          sentence_start_date, sentence_end_date, status
+ 89      ) VALUES (
+ 90          seq_sentence_id.NEXTVAL, v_prisoner_id, p_offense_id,
+ 91          'CR-' || LPAD(seq_sentence_id.CURRVAL, 6, '0'),
+ 92          p_court_name, SYSDATE, 'Imprisonment',
+ 93          p_sentence_years, p_sentence_months, p_sentence_days,
+ 94          SYSDATE, SYSDATE + (p_sentence_years * 365) + (p_sentence_months * 30) + p_sentence_days,
+ 95          'Active'
+ 96      )
+ 97      RETURNING sentence_id INTO v_sentence_id;
+ 98  
+ 99      -- Create prisoner assignment
+100      INSERT INTO prisoner_assignments (
+101          assignment_id, prisoner_id, prison_id, cell_id,
+102          assignment_date, assignment_reason, status
+103      ) VALUES (
+104          seq_assignment_id.NEXTVAL, v_prisoner_id, p_prison_id, p_cell_id,
+105          SYSDATE, 'New prisoner admission', 'Active'
+106      )
+107      RETURNING assignment_id INTO v_assignment_id;
+108  
+109      -- Update cell occupancy if cell assigned
+110      IF p_cell_id IS NOT NULL THEN
+111          UPDATE cells
+112          SET current_occupancy = current_occupancy + 1,
+113              status = CASE 
+114                          WHEN current_occupancy + 1 >= cell_capacity THEN 'Occupied'
+115                          ELSE 'Available'
+116                       END
+117          WHERE cell_id = p_cell_id;
+118      END IF;
+119  
+120      -- Update block occupancy
+121      UPDATE blocks b
+122      SET current_occupancy = (
+123          SELECT COUNT(DISTINCT pa.prisoner_id)
+124          FROM prisoner_assignments pa
+125          JOIN cells c ON pa.cell_id = c.cell_id
+126          WHERE c.block_id = b.block_id
+127          AND pa.status = 'Active'
+128      )
+129      WHERE block_id = (
+130          SELECT block_id FROM cells WHERE cell_id = p_cell_id
+131      );
+132  
+133      -- Set output parameters
+134      p_out_prisoner_id := v_prisoner_id;
+135      p_out_assignment_id := v_assignment_id;
+136      p_out_sentence_id := v_sentence_id;
+137  
+138      COMMIT;
+139      DBMS_OUTPUT.PUT_LINE('✅ New prisoner added successfully with ID: ' || v_prisoner_id);
+140  
+141  EXCEPTION
+142      WHEN DUP_VAL_ON_INDEX THEN
+143          ROLLBACK;
+144          RAISE_APPLICATION_ERROR(-20015, 'Duplicate national ID found');
+145      WHEN OTHERS THEN
+146          ROLLBACK;
+147          RAISE_APPLICATION_ERROR(-20016, 'Error adding prisoner: ' || SQLERRM);
+148  END add_new_prisoner;
+149  /
+
+Procedure ADD_NEW_PRISONER compiled
+
+SQL> 
+SQL> -- Procedure 2: Update Prisoner Status (Release/Transfer)
+SQL> CREATE OR REPLACE PROCEDURE update_prisoner_status(
+  2      p_prisoner_id      IN NUMBER,
+  3      p_new_status       IN VARCHAR2,
+  4      p_transfer_prison_id IN NUMBER DEFAULT NULL,
+  5      p_release_date     IN DATE DEFAULT NULL,
+  6      p_release_reason   IN VARCHAR2 DEFAULT NULL,
+  7      p_out_message      OUT VARCHAR2
+  8  )
+  9  IS
+ 10      v_current_status VARCHAR2(20);
+ 11      v_assignment_id NUMBER;
+ 12      v_cell_id NUMBER;
+ 13      v_prison_id NUMBER;
+ 14  BEGIN
+ 15      -- Get current status and assignment
+ 16      SELECT p.status, pa.assignment_id, pa.cell_id, pa.prison_id
+ 17      INTO v_current_status, v_assignment_id, v_cell_id, v_prison_id
+ 18      FROM prisoners p
+ 19      JOIN prisoner_assignments pa ON p.prisoner_id = pa.prisoner_id
+ 20      WHERE p.prisoner_id = p_prisoner_id
+ 21      AND pa.status = 'Active';
+ 22  
+ 23      -- Validate status transition
+ 24      IF v_current_status = 'Released' THEN
+ 25          RAISE_APPLICATION_ERROR(-20017, 'Cannot update status of a released prisoner');
+ 26      END IF;
+ 27  
+ 28      IF p_new_status NOT IN ('Active', 'Released', 'Transferred', 'Deceased', 'Escaped') THEN
+ 29          RAISE_APPLICATION_ERROR(-20018, 'Invalid status value');
+ 30      END IF;
+ 31  
+ 32      -- Update prisoner status
+ 33      UPDATE prisoners
+ 34      SET status = p_new_status,
+ 35          actual_release_date = CASE 
+ 36                                  WHEN p_new_status = 'Released' AND p_release_date IS NOT NULL 
+ 37                                  THEN p_release_date
+ 38                                  WHEN p_new_status = 'Released' 
+ 39                                  THEN SYSDATE
+ 40                                  ELSE actual_release_date
+ 41                                END,
+ 42          last_updated = SYSDATE
+ 43      WHERE prisoner_id = p_prisoner_id;
+ 44  
+ 45      -- Update assignment status
+ 46      UPDATE prisoner_assignments
+ 47      SET assignment_end_date = CASE 
+ 48                                  WHEN p_new_status IN ('Released', 'Transferred') 
+ 49                                  THEN SYSDATE 
+ 50                                END,
+ 51          status = CASE 
+ 52                      WHEN p_new_status IN ('Released', 'Transferred') THEN 'Completed'
+ 53                      ELSE status
+ 54                   END
+ 55      WHERE assignment_id = v_assignment_id;
+ 56  
+ 57      -- Update cell occupancy if prisoner was in a cell
+ 58      IF v_cell_id IS NOT NULL AND p_new_status IN ('Released', 'Transferred') THEN
+ 59          UPDATE cells
+ 60          SET current_occupancy = GREATEST(current_occupancy - 1, 0),
+ 61              status = CASE 
+ 62                          WHEN current_occupancy - 1 <= 0 THEN 'Available'
+ 63                          WHEN current_occupancy - 1 < cell_capacity THEN 'Available'
+ 64                          ELSE 'Occupied'
+ 65                       END
+ 66          WHERE cell_id = v_cell_id;
+ 67  
+ 68          -- Update block occupancy
+ 69          UPDATE blocks b
+ 70          SET current_occupancy = (
+ 71              SELECT COUNT(DISTINCT pa.prisoner_id)
+ 72              FROM prisoner_assignments pa
+ 73              JOIN cells c ON pa.cell_id = c.cell_id
+ 74              WHERE c.block_id = b.block_id
+ 75              AND pa.status = 'Active'
+ 76          )
+ 77          WHERE block_id = (
+ 78              SELECT block_id FROM cells WHERE cell_id = v_cell_id
+ 79          );
+ 80      END IF;
+ 81  
+ 82      -- If transferring to another prison
+ 83      IF p_new_status = 'Transferred' AND p_transfer_prison_id IS NOT NULL THEN
+ 84          -- Create new assignment in new prison
+ 85          INSERT INTO prisoner_assignments (
+ 86              assignment_id, prisoner_id, prison_id,
+ 87              assignment_date, assignment_reason, status
+ 88          ) VALUES (
+ 89              seq_assignment_id.NEXTVAL, p_prisoner_id, p_transfer_prison_id,
+ 90              SYSDATE, 'Prison transfer from ' || v_prison_id, 'Active'
+ 91          );
+ 92  
+ 93          p_out_message := 'Prisoner transferred to prison ID: ' || p_transfer_prison_id;
+ 94      ELSE
+ 95          p_out_message := 'Prisoner status updated to: ' || p_new_status;
+ 96      END IF;
+ 97  
+ 98      COMMIT;
+ 99      DBMS_OUTPUT.PUT_LINE('✅ Prisoner status updated successfully');
+100  
+101  EXCEPTION
+102      WHEN NO_DATA_FOUND THEN
+103          RAISE_APPLICATION_ERROR(-20019, 'Prisoner ID ' || p_prisoner_id || ' not found or no active assignment');
+104      WHEN OTHERS THEN
+105          ROLLBACK;
+106          RAISE_APPLICATION_ERROR(-20020, 'Error updating prisoner status: ' || SQLERRM);
+107  END update_prisoner_status;
+108  /
+
+Procedure UPDATE_PRISONER_STATUS compiled
+
+SQL> 
+SQL> -- Procedure 3: Record Medical Visit
+SQL> CREATE OR REPLACE PROCEDURE record_medical_visit(
+  2      p_prisoner_id          IN NUMBER,
+  3      p_diagnosis            IN VARCHAR2,
+  4      p_treatment            IN VARCHAR2,
+  5      p_prescribed_medication IN VARCHAR2,
+  6      p_attending_staff_id   IN NUMBER,
+  7      p_next_appointment_date IN DATE DEFAULT NULL,
+  8      p_notes                IN VARCHAR2 DEFAULT NULL,
+  9      p_out_record_id        OUT NUMBER
+ 10  )
+ 11  IS
+ 12      v_prisoner_status VARCHAR2(20);
+ 13      v_staff_department VARCHAR2(100);
+ 14      v_medical_record_id NUMBER;
+ 15  BEGIN
+ 16      -- Validate prisoner status
+ 17      SELECT status INTO v_prisoner_status
+ 18      FROM prisoners
+ 19      WHERE prisoner_id = p_prisoner_id;
+ 20  
+ 21      IF v_prisoner_status != 'Active' THEN
+ 22          RAISE_APPLICATION_ERROR(-20021, 'Cannot record medical visit for non-active prisoner');
+ 23      END IF;
+ 24  
+ 25      -- Validate staff is from medical department
+ 26      SELECT department INTO v_staff_department
+ 27      FROM staff
+ 28      WHERE staff_id = p_attending_staff_id
+ 29      AND status = 'Active';
+ 30  
+ 31      IF v_staff_department != 'Medical' THEN
+ 32          RAISE_APPLICATION_ERROR(-20022, 'Only medical staff can record medical visits');
+ 33      END IF;
+ 34  
+ 35      -- Insert medical record
+ 36      INSERT INTO medical_records (
+ 37          medical_record_id, prisoner_id, visit_date, diagnosis,
+ 38          treatment, prescribed_medication, attending_staff_id,
+ 39          next_appointment_date, notes
+ 40      ) VALUES (
+ 41          seq_medical_record_id.NEXTVAL, p_prisoner_id, SYSDATE, p_diagnosis,
+ 42          p_treatment, p_prescribed_medication, p_attending_staff_id,
+ 43          p_next_appointment_date, p_notes
+ 44      )
+ 45      RETURNING medical_record_id INTO v_medical_record_id;
+ 46  
+ 47      -- If diagnosis indicates emergency, create incident
+ 48      IF UPPER(p_diagnosis) LIKE '%EMERGENCY%' OR 
+ 49         UPPER(p_diagnosis) LIKE '%CRITICAL%' OR
+ 50         UPPER(p_diagnosis) LIKE '%URGENT%' THEN
+ 51  
+ 52          DECLARE
+ 53              v_prison_id NUMBER;
+ 54              v_incident_id NUMBER;
+ 55          BEGIN
+ 56              -- Get prison ID from assignment
+ 57              SELECT prison_id INTO v_prison_id
+ 58              FROM prisoner_assignments
+ 59              WHERE prisoner_id = p_prisoner_id
+ 60              AND status = 'Active'
+ 61              AND ROWNUM = 1;
+ 62  
+ 63              -- Create medical emergency incident
+ 64              INSERT INTO incidents (
+ 65                  incident_id, incident_type, severity, incident_date,
+ 66                  location, prison_id, reported_by_staff_id,
+ 67                  description, action_taken, status
+ 68              ) VALUES (
+ 69                  seq_incident_id.NEXTVAL, 'Medical Emergency', 'Critical',
+ 70                  SYSDATE, 'Medical Ward', v_prison_id, p_attending_staff_id,
+ 71                  'Medical emergency: ' || p_diagnosis,
+ 72                  'Treatment provided: ' || p_treatment,
+ 73                  'Resolved'
+ 74              )
+ 75              RETURNING incident_id INTO v_incident_id;
+ 76  
+ 77              -- Link prisoner to incident
+ 78              INSERT INTO incident_prisoners (
+ 79                  incident_prisoner_id, incident_id, prisoner_id,
+ 80                  involvement_type, disciplinary_action
+ 81              ) VALUES (
+ 82                  seq_incident_prisoner_id.NEXTVAL, v_incident_id, p_prisoner_id,
+ 83                  'Victim', NULL
+ 84              );
+ 85  
+ 86              DBMS_OUTPUT.PUT_LINE('⚠️ Medical emergency incident recorded: ' || v_incident_id);
+ 87          EXCEPTION
+ 88              WHEN NO_DATA_FOUND THEN
+ 89                  NULL; -- No prison assignment found, continue
+ 90          END;
+ 91      END IF;
+ 92  
+ 93      p_out_record_id := v_medical_record_id;
+ 94      COMMIT;
+ 95      DBMS_OUTPUT.PUT_LINE('✅ Medical visit recorded successfully with ID: ' || v_medical_record_id);
+ 96  
+ 97  EXCEPTION
+ 98      WHEN NO_DATA_FOUND THEN
+ 99          RAISE_APPLICATION_ERROR(-20023, 'Prisoner or staff not found');
+100      WHEN OTHERS THEN
+101          ROLLBACK;
+102          RAISE_APPLICATION_ERROR(-20024, 'Error recording medical visit: ' || SQLERRM);
+103  END record_medical_visit;
+104  /
+
+Procedure RECORD_MEDICAL_VISIT compiled
+
+SQL> 
+SQL> -- Procedure 4: Schedule Visit with Validation
+SQL> CREATE OR REPLACE PROCEDURE schedule_visit(
+  2      p_prisoner_id      IN NUMBER,
+  3      p_visitor_id       IN NUMBER,
+  4      p_visit_date       IN DATE,
+  5      p_visit_time_start IN TIMESTAMP,
+  6      p_visit_time_end   IN TIMESTAMP,
+  7      p_visit_type       IN VARCHAR2,
+  8      p_purpose          IN VARCHAR2 DEFAULT NULL,
+  9      p_approved_by      IN NUMBER,
+ 10      p_out_visit_id     OUT NUMBER,
+ 11      p_out_message      OUT VARCHAR2
+ 12  )
+ 13  IS
+ 14      v_prisoner_status VARCHAR2(20);
+ 15      v_visitor_status VARCHAR2(20);
+ 16      v_staff_position VARCHAR2(100);
+ 17      v_existing_visits NUMBER;
+ 18      v_visit_id NUMBER;
+ 19      v_max_daily_visits CONSTANT NUMBER := 3;
+ 20      v_max_visitor_visits CONSTANT NUMBER := 2;
+ 21  BEGIN
+ 22      -- Validate prisoner status
+ 23      SELECT status INTO v_prisoner_status
+ 24      FROM prisoners
+ 25      WHERE prisoner_id = p_prisoner_id;
+ 26  
+ 27      IF v_prisoner_status != 'Active' THEN
+ 28          RAISE_APPLICATION_ERROR(-20025, 'Visits can only be scheduled for active prisoners');
+ 29      END IF;
+ 30  
+ 31      -- Validate visitor status
+ 32      SELECT status INTO v_visitor_status
+ 33      FROM visitors
+ 34      WHERE visitor_id = p_visitor_id;
+ 35  
+ 36      IF v_visitor_status != 'Approved' THEN
+ 37          RAISE_APPLICATION_ERROR(-20026, 'Visitor is not approved for visits');
+ 38      END IF;
+ 39  
+ 40      -- Validate staff has authority to approve visits
+ 41      SELECT position INTO v_staff_position
+ 42      FROM staff
+ 43      WHERE staff_id = p_approved_by
+ 44      AND status = 'Active';
+ 45  
+ 46      IF v_staff_position NOT IN ('Warden', 'Deputy Warden', 'Senior Officer', 'Prison Officer') THEN
+ 47          RAISE_APPLICATION_ERROR(-20027, 'Staff member does not have authority to approve visits');
+ 48      END IF;
+ 49  
+ 50      -- Check visit time constraints
+ 51      IF p_visit_time_end <= p_visit_time_start THEN
+ 52          RAISE_APPLICATION_ERROR(-20028, 'Visit end time must be after start time');
+ 53      END IF;
+ 54  
+ 55      IF EXTRACT(HOUR FROM CAST(p_visit_time_start AS TIMESTAMP)) < 9 OR
+ 56         EXTRACT(HOUR FROM CAST(p_visit_time_end AS TIMESTAMP)) > 17 THEN
+ 57          RAISE_APPLICATION_ERROR(-20029, 'Visits can only be scheduled between 9 AM and 5 PM');
+ 58      END IF;
+ 59  
+ 60      -- Check prisoner's daily visit limit
+ 61      SELECT COUNT(*) INTO v_existing_visits
+ 62      FROM visits
+ 63      WHERE prisoner_id = p_prisoner_id
+ 64      AND TRUNC(visit_date) = TRUNC(p_visit_date)
+ 65      AND status IN ('Scheduled', 'Completed');
+ 66  
+ 67      IF v_existing_visits >= v_max_daily_visits THEN
+ 68          RAISE_APPLICATION_ERROR(-20030, 'Prisoner has reached daily visit limit');
+ 69      END IF;
+ 70  
+ 71      -- Check visitor's daily visit limit
+ 72      SELECT COUNT(*) INTO v_existing_visits
+ 73      FROM visits
+ 74      WHERE visitor_id = p_visitor_id
+ 75      AND TRUNC(visit_date) = TRUNC(p_visit_date)
+ 76      AND status IN ('Scheduled', 'Completed');
+ 77  
+ 78      IF v_existing_visits >= v_max_visitor_visits THEN
+ 79          RAISE_APPLICATION_ERROR(-20031, 'Visitor has reached daily visit limit');
+ 80      END IF;
+ 81  
+ 82      -- Insert visit record
+ 83      INSERT INTO visits (
+ 84          visit_id, prisoner_id, visitor_id, visit_date,
+ 85          visit_time_start, visit_time_end, visit_type,
+ 86          approved_by_staff_id, purpose, notes, status
+ 87      ) VALUES (
+ 88          seq_visit_id.NEXTVAL, p_prisoner_id, p_visitor_id, p_visit_date,
+ 89          p_visit_time_start, p_visit_time_end, p_visit_type,
+ 90          p_approved_by, p_purpose, 'Auto-generated by scheduling system', 'Scheduled'
+ 91      )
+ 92      RETURNING visit_id INTO v_visit_id;
+ 93  
+ 94      p_out_visit_id := v_visit_id;
+ 95      p_out_message := 'Visit scheduled successfully for ' || 
+ 96                       TO_CHAR(p_visit_date, 'DD-MON-YYYY') || ' ' ||
+ 97                       TO_CHAR(p_visit_time_start, 'HH24:MI');
+ 98  
+ 99      COMMIT;
+100      DBMS_OUTPUT.PUT_LINE('✅ Visit scheduled successfully with ID: ' || v_visit_id);
+101  
+102  EXCEPTION
+103      WHEN NO_DATA_FOUND THEN
+104          RAISE_APPLICATION_ERROR(-20032, 'Prisoner, visitor, or staff not found');
+105      WHEN OTHERS THEN
+106          ROLLBACK;
+107          RAISE_APPLICATION_ERROR(-20033, 'Error scheduling visit: ' || SQLERRM);
+108  END schedule_visit;
+109  /
+
+Procedure SCHEDULE_VISIT compiled
+
+Errors: check compiler log
+SQL> 
+SQL> -- Procedure 5: Generate Prison Statistics Report
+SQL> CREATE OR REPLACE PROCEDURE generate_prison_report(
+  2      p_prison_id IN NUMBER,
+  3      p_report_type IN VARCHAR2 DEFAULT 'SUMMARY',
+  4      p_out_report OUT CLOB
+  5  )
+  6  IS
+  7      v_prison_name VARCHAR2(100);
+  8      v_capacity NUMBER;
+  9      v_current_population NUMBER;
+ 10      v_utilization_percent NUMBER;
+ 11      v_report_text CLOB;
+ 12  
+ 13      -- Cursor for prisoner demographics
+ 14      CURSOR c_demographics IS
+ 15          SELECT 
+ 16              gender,
+ 17              COUNT(*) as count,
+ 18              ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage,
+ 19              AVG(calculate_prisoner_age(prisoner_id)) as avg_age
+ 20          FROM prisoners p
+ 21          WHERE prisoner_id IN (
+ 22              SELECT prisoner_id 
+ 23              FROM prisoner_assignments 
+ 24              WHERE prison_id = p_prison_id 
+ 25              AND status = 'Active'
+ 26          )
+ 27          AND status = 'Active'
+ 28          GROUP BY gender
+ 29          ORDER BY gender;
+ 30  
+ 31      -- Cursor for top offenses
+ 32      CURSOR c_top_offenses IS
+ 33          SELECT 
+ 34              o.offense_name,
+ 35              COUNT(s.sentence_id) as offense_count,
+ 36              ROUND(COUNT(s.sentence_id) * 100.0 / SUM(COUNT(s.sentence_id)) OVER (), 2) as percentage
+ 37          FROM sentences s
+ 38          JOIN offenses o ON s.offense_id = o.offense_id
+ 39          WHERE s.prisoner_id IN (
+ 40              SELECT prisoner_id 
+ 41              FROM prisoner_assignments 
+ 42              WHERE prison_id = p_prison_id 
+ 43              AND status = 'Active'
+ 44          )
+ 45          AND s.status = 'Active'
+ 46          GROUP BY o.offense_name
+ 47          ORDER BY offense_count DESC
+ 48          FETCH FIRST 5 ROWS ONLY;
+ 49  
+ 50      -- Cursor for block utilization
+ 51      CURSOR c_block_utilization IS
+ 52          SELECT 
+ 53              b.block_name,
+ 54              b.block_type,
+ 55              b.capacity,
+ 56              COUNT(DISTINCT pa.prisoner_id) as current_occupancy,
+ 57              ROUND(COUNT(DISTINCT pa.prisoner_id) * 100.0 / b.capacity, 2) as utilization_percent
+ 58          FROM blocks b
+ 59          LEFT JOIN cells c ON b.block_id = c.block_id
+ 60          LEFT JOIN prisoner_assignments pa ON c.cell_id = pa.cell_id AND pa.status = 'Active'
+ 61          WHERE b.prison_id = p_prison_id
+ 62          GROUP BY b.block_id, b.block_name, b.block_type, b.capacity
+ 63          ORDER BY b.block_name;
+ 64  BEGIN
+ 65      -- Get prison basic information
+ 66      SELECT prison_name, capacity INTO v_prison_name, v_capacity
+ 67      FROM prisons
+ 68      WHERE prison_id = p_prison_id;
+ 69  
+ 70      -- Get current population
+ 71      SELECT COUNT(DISTINCT prisoner_id) INTO v_current_population
+ 72      FROM prisoner_assignments
+ 73      WHERE prison_id = p_prison_id
+ 74      AND status = 'Active';
+ 75  
+ 76      -- Calculate utilization
+ 77      v_utilization_percent := get_prison_utilization(p_prison_id);
+ 78  
+ 79      -- Start building report
+ 80      v_report_text := 'PRISON MANAGEMENT SYSTEM - STATISTICAL REPORT' || CHR(10);
+ 81      v_report_text := v_report_text || '===============================================' || CHR(10) || CHR(10);
+ 82      v_report_text := v_report_text || 'Prison: ' || v_prison_name || CHR(10);
+ 83      v_report_text := v_report_text || 'Report Type: ' || p_report_type || CHR(10);
+ 84      v_report_text := v_report_text || 'Generated: ' || TO_CHAR(SYSDATE, 'DD-MON-YYYY HH24:MI:SS') || CHR(10);
+ 85      v_report_text := v_report_text || '===============================================' || CHR(10) || CHR(10);
+ 86  
+ 87      -- Basic statistics
+ 88      v_report_text := v_report_text || 'BASIC STATISTICS:' || CHR(10);
+ 89      v_report_text := v_report_text || '-----------------' || CHR(10);
+ 90      v_report_text := v_report_text || 'Capacity: ' || v_capacity || CHR(10);
+ 91      v_report_text := v_report_text || 'Current Population: ' || v_current_population || CHR(10);
+ 92      v_report_text := v_report_text || 'Utilization: ' || v_utilization_percent || '%' || CHR(10) || CHR(10);
+ 93  
+ 94      -- Demographics section
+ 95      v_report_text := v_report_text || 'PRISONER DEMOGRAPHICS:' || CHR(10);
+ 96      v_report_text := v_report_text || '----------------------' || CHR(10);
+ 97  
+ 98      FOR rec IN c_demographics LOOP
+ 99          v_report_text := v_report_text || 
+100              rec.gender || ': ' || rec.count || ' prisoners (' || rec.percentage || '%), ' ||
+101              'Average Age: ' || ROUND(rec.avg_age, 1) || CHR(10);
+102      END LOOP;
+103  
+104      v_report_text := v_report_text || CHR(10);
+105  
+106      -- Top offenses section
+107      v_report_text := v_report_text || 'TOP 5 OFFENSES:' || CHR(10);
+108      v_report_text := v_report_text || '---------------' || CHR(10);
+109  
+110      FOR rec IN c_top_offenses LOOP
+111          v_report_text := v_report_text || 
+112              rec.offense_name || ': ' || rec.offense_count || ' cases (' || rec.percentage || '%)' || CHR(10);
+113      END LOOP;
+114  
+115      v_report_text := v_report_text || CHR(10);
+116  
+117      -- Block utilization section
+118      v_report_text := v_report_text || 'BLOCK UTILIZATION:' || CHR(10);
+119      v_report_text := v_report_text || '------------------' || CHR(10);
+120  
+121      FOR rec IN c_block_utilization LOOP
+122          v_report_text := v_report_text || 
+123              rec.block_name || ' (' || rec.block_type || '): ' || 
+124              rec.current_occupancy || '/' || rec.capacity || ' (' || 
+125              rec.utilization_percent || '%)' || CHR(10);
+126      END LOOP;
+127  
+128      -- Add summary based on report type
+129      IF p_report_type = 'DETAILED' THEN
+130          v_report_text := v_report_text || CHR(10) || 'DETAILED ANALYSIS:' || CHR(10);
+131          v_report_text := v_report_text || '-------------------' || CHR(10);
+132  
+133          -- Add program participation
+134          DECLARE
+135              v_total_enrollments NUMBER;
+136              v_avg_programs_per_prisoner NUMBER;
+137          BEGIN
+138              SELECT COUNT(*), 
+139                     ROUND(COUNT(*) * 1.0 / v_current_population, 2)
+140              INTO v_total_enrollments, v_avg_programs_per_prisoner
+141              FROM program_enrollments pe
+142              WHERE pe.prisoner_id IN (
+143                  SELECT prisoner_id 
+144                  FROM prisoner_assignments 
+145                  WHERE prison_id = p_prison_id 
+146                  AND status = 'Active'
+147              )
+148              AND pe.completion_status IN ('Enrolled', 'In Progress');
+149  
+150              v_report_text := v_report_text || 
+151                  'Total Program Enrollments: ' || v_total_enrollments || CHR(10) ||
+152                  'Average Programs per Prisoner: ' || v_avg_programs_per_prisoner || CHR(10);
+153          EXCEPTION
+154              WHEN NO_DATA_FOUND THEN
+155                  NULL;
+156          END;
+157      END IF;
+158  
+159      -- Add footer
+160      v_report_text := v_report_text || CHR(10
+
+Procedure GENERATE_PRISON_REPORT compiled
+
+Errors: check compiler log
+SQL> -- ============================================================
+SQL> -- PHASE VI: Database Interaction & Transactions
+SQL> -- Prison Management System - PL/SQL Implementation
+SQL> -- ============================================================
+SQL> -- Group: D
+SQL> -- Student ID: 27453
+SQL> -- Student Name: IRERA Mukawera Jockebed
+SQL> -- Database: grpD_27453_jockebed_PrisonManagementSystem_db
+SQL> -- ============================================================
+SQL> SET SERVEROUTPUT ON SIZE UNLIMITED
+SQL> SET ECHO ON
+SQL> SET FEEDBACK ON
+SQL> SET LINESIZE 200
+SQL> 
+SQL> ALTER SESSION SET CONTAINER = grpD_27453_jockebed_PrisonManagementSystem_db;
+
+Session altered.
+
+SQL> 
+SQL> PROMPT ============================================================
+============================================================
+SQL> PROMPT PHASE VI: DATABASE INTERACTION & TRANSACTIONS
+PHASE VI: DATABASE INTERACTION 2
+SQL> PROMPT PL/SQL Procedures, Functions, and Packages Implementation
+PL/SQL Procedures, Functions, and Packages Implementation
+SQL> PROMPT ============================================================
+============================================================
+SQL> 
+SQL> -- ============================================================
+SQL> -- PART 1: CUSTOM EXCEPTIONS AND ERROR HANDLING
+SQL> -- ============================================================
+SQL> 
+SQL> PROMPT Creating custom exceptions...
+Creating custom exceptions...
+SQL> 
+SQL> DECLARE
+  2      -- Custom exceptions for prison management system
+  3      invalid_prisoner_data EXCEPTION;
+  4      prison_capacity_exceeded EXCEPTION;
+  5      sentence_duration_error EXCEPTION;
+  6      duplicate_prisoner_exception EXCEPTION;
+  7      insufficient_privileges EXCEPTION;
+  8      medical_emergency_exception EXCEPTION;
+  9      invalid_assignment_exception EXCEPTION;
+ 10  
+ 11      -- PRAGMA to associate error numbers
+ 12      PRAGMA EXCEPTION_INIT(invalid_prisoner_data, -20001);
+ 13      PRAGMA EXCEPTION_INIT(prison_capacity_exceeded, -20002);
+ 14      PRAGMA EXCEPTION_INIT(sentence_duration_error, -20003);
+ 15      PRAGMA EXCEPTION_INIT(duplicate_prisoner_exception, -20004);
+ 16      PRAGMA EXCEPTION_INIT(insufficient_privileges, -20005);
+ 17      PRAGMA EXCEPTION_INIT(medical_emergency_exception, -20006);
+ 18      PRAGMA EXCEPTION_INIT(invalid_assignment_exception, -20007);
+ 19  BEGIN
+ 20      DBMS_OUTPUT.PUT_LINE('✅ Custom exceptions defined');
+ 21  EXCEPTION
+ 22      WHEN OTHERS THEN
+ 23          DBMS_OUTPUT.PUT_LINE('Error defining exceptions: ' || SQLERRM);
+ 24  END;
+ 25  /
+✅ Custom exceptions defined
+
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> -- ============================================================
+SQL> -- PART 2: FUNCTIONS (Minimum 3-5)
+SQL> -- ============================================================
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT Creating Functions...
+Creating Functions...
+SQL> PROMPT ============================
+============================
+SQL> 
+SQL> -- Function 1: Calculate Prisoner Age
+SQL> CREATE OR REPLACE FUNCTION calculate_prisoner_age(
+  2      p_prisoner_id IN NUMBER
+  3  ) RETURN NUMBER
+  4  IS
+  5      v_dob DATE;
+  6      v_age NUMBER;
+  7  BEGIN
+  8      -- Get date of birth
+  9      SELECT date_of_birth INTO v_dob
+ 10      FROM prisoners
+ 11      WHERE prisoner_id = p_prisoner_id;
+ 12  
+ 13      -- Calculate age in years
+ 14      v_age := TRUNC(MONTHS_BETWEEN(SYSDATE, v_dob) / 12);
+ 15  
+ 16      RETURN v_age;
+ 17  EXCEPTION
+ 18      WHEN NO_DATA_FOUND THEN
+ 19          RAISE_APPLICATION_ERROR(-20001, 'Prisoner ID ' || p_prisoner_id || ' not found');
+ 20          RETURN NULL;
+ 21      WHEN OTHERS THEN
+ 22          RAISE_APPLICATION_ERROR(-20002, 'Error calculating age: ' || SQLERRM);
+ 23          RETURN NULL;
+ 24  END calculate_prisoner_age;
+ 25  /
+
+Function CALCULATE_PRISONER_AGE compiled
+
+SQL> 
+SQL> -- Function 2: Validate National ID
+SQL> CREATE OR REPLACE FUNCTION validate_national_id(
+  2      p_national_id IN VARCHAR2
+  3  ) RETURN VARCHAR2
+  4  IS
+  5      v_is_valid VARCHAR2(1) := 'N';
+  6  BEGIN
+  7      -- Check if national ID is not null and follows basic format
+  8      IF p_national_id IS NOT NULL AND LENGTH(p_national_id) = 13 THEN
+  9          -- Check if it's numeric (except first character can be letter)
+ 10          IF REGEXP_LIKE(p_national_id, '^[0-9]{13}$') THEN
+ 11              v_is_valid := 'Y';
+ 12          END IF;
+ 13      END IF;
+ 14  
+ 15      RETURN v_is_valid;
+ 16  EXCEPTION
+ 17      WHEN OTHERS THEN
+ 18          RETURN 'E'; -- Error
+ 19  END validate_national_id;
+ 20  /
+
+Function VALIDATE_NATIONAL_ID compiled
+
+SQL> 
+SQL> -- Function 3: Calculate Remaining Sentence Days
+SQL> CREATE OR REPLACE FUNCTION calculate_remaining_sentence(
+  2      p_prisoner_id IN NUMBER
+  3  ) RETURN NUMBER
+  4  IS
+  5      v_sentence_end DATE;
+  6      v_remaining_days NUMBER;
+  7      v_actual_release DATE;
+  8  BEGIN
+  9      -- Get actual release date if exists
+ 10      SELECT actual_release_date INTO v_actual_release
+ 11      FROM prisoners
+ 12      WHERE prisoner_id = p_prisoner_id;
+ 13  
+ 14      IF v_actual_release IS NOT NULL THEN
+ 15          -- Prisoner already released
+ 16          RETURN 0;
+ 17      END IF;
+ 18  
+ 19      -- Get latest sentence end date
+ 20      SELECT MAX(sentence_end_date) INTO v_sentence_end
+ 21      FROM sentences
+ 22      WHERE prisoner_id = p_prisoner_id
+ 23      AND status = 'Active';
+ 24  
+ 25      IF v_sentence_end IS NULL THEN
+ 26          RAISE_APPLICATION_ERROR(-20003, 'No active sentence found for prisoner ' || p_prisoner_id);
+ 27      END IF;
+ 28  
+ 29      -- Calculate remaining days
+ 30      v_remaining_days := GREATEST(v_sentence_end - SYSDATE, 0);
+ 31  
+ 32      RETURN TRUNC(v_remaining_days);
+ 33  EXCEPTION
+ 34      WHEN NO_DATA_FOUND THEN
+ 35          RAISE_APPLICATION_ERROR(-20004, 'Prisoner ID ' || p_prisoner_id || ' not found');
+ 36          RETURN NULL;
+ 37      WHEN OTHERS THEN
+ 38          RAISE_APPLICATION_ERROR(-20005, 'Error calculating remaining sentence: ' || SQLERRM);
+ 39          RETURN NULL;
+ 40  END calculate_remaining_sentence;
+ 41  /
+
+Function CALCULATE_REMAINING_SENTENCE compiled
+
+SQL> 
+SQL> -- Function 4: Get Prison Utilization Percentage
+SQL> CREATE OR REPLACE FUNCTION get_prison_utilization(
+  2      p_prison_id IN NUMBER
+  3  ) RETURN NUMBER
+  4  IS
+  5      v_capacity NUMBER;
+  6      v_current_occupancy NUMBER;
+  7      v_utilization NUMBER;
+  8  BEGIN
+  9      -- Get prison capacity
+ 10      SELECT capacity INTO v_capacity
+ 11      FROM prisons
+ 12      WHERE prison_id = p_prison_id;
+ 13  
+ 14      -- Count active prisoner assignments in this prison
+ 15      SELECT COUNT(DISTINCT pa.prisoner_id) INTO v_current_occupancy
+ 16      FROM prisoner_assignments pa
+ 17      WHERE pa.prison_id = p_prison_id
+ 18      AND pa.status = 'Active';
+ 19  
+ 20      -- Calculate utilization percentage
+ 21      v_utilization := (v_current_occupancy / v_capacity) * 100;
+ 22  
+ 23      RETURN ROUND(v_utilization, 2);
+ 24  EXCEPTION
+ 25      WHEN NO_DATA_FOUND THEN
+ 26          RAISE_APPLICATION_ERROR(-20006, 'Prison ID ' || p_prison_id || ' not found');
+ 27          RETURN NULL;
+ 28      WHEN ZERO_DIVIDE THEN
+ 29          RETURN 0;
+ 30      WHEN OTHERS THEN
+ 31          RAISE_APPLICATION_ERROR(-20007, 'Error calculating utilization: ' || SQLERRM);
+ 32          RETURN NULL;
+ 33  END get_prison_utilization;
+ 34  /
+
+Function GET_PRISON_UTILIZATION compiled
+
+SQL> 
+SQL> -- Function 5: Lookup Prisoner Information
+SQL> CREATE OR REPLACE FUNCTION get_prisoner_info(
+  2      p_prisoner_id IN NUMBER
+  3  ) RETURN VARCHAR2
+  4  IS
+  5      v_prisoner_info VARCHAR2(1000);
+  6      v_prisoner_rec prisoners%ROWTYPE;
+  7      v_sentence_rec sentences%ROWTYPE;
+  8      v_offense_rec offenses%ROWTYPE;
+  9  BEGIN
+ 10      -- Get prisoner details
+ 11      SELECT * INTO v_prisoner_rec
+ 12      FROM prisoners
+ 13      WHERE prisoner_id = p_prisoner_id;
+ 14  
+ 15      -- Get latest sentence and offense
+ 16      BEGIN
+ 17          SELECT s.* INTO v_sentence_rec
+ 18          FROM sentences s
+ 19          WHERE s.prisoner_id = p_prisoner_id
+ 20          AND s.status = 'Active'
+ 21          AND ROWNUM = 1
+ 22          ORDER BY s.sentence_start_date DESC;
+ 23  
+ 24          SELECT o.* INTO v_offense_rec
+ 25          FROM offenses o
+ 26          WHERE o.offense_id = v_sentence_rec.offense_id;
+ 27  
+ 28          v_prisoner_info := 'Name: ' || v_prisoner_rec.first_name || ' ' || v_prisoner_rec.last_name ||
+ 29                            ', Age: ' || calculate_prisoner_age(p_prisoner_id) ||
+ 30                            ', Offense: ' || v_offense_rec.offense_name ||
+ 31                            ', Sentence: ' || v_sentence_rec.sentence_duration_years || ' years' ||
+ 32                            ', Status: ' || v_prisoner_rec.status;
+ 33      EXCEPTION
+ 34          WHEN NO_DATA_FOUND THEN
+ 35              v_prisoner_info := 'Name: ' || v_prisoner_rec.first_name || ' ' || v_prisoner_rec.last_name ||
+ 36                                ', Age: ' || calculate_prisoner_age(p_prisoner_id) ||
+ 37                                ', Status: ' || v_prisoner_rec.status || ' (No active sentence)';
+ 38      END;
+ 39  
+ 40      RETURN v_prisoner_info;
+ 41  EXCEPTION
+ 42      WHEN NO_DATA_FOUND THEN
+ 43          RAISE_APPLICATION_ERROR(-20008, 'Prisoner ID ' || p_prisoner_id || ' not found');
+ 44          RETURN NULL;
+ 45      WHEN OTHERS THEN
+ 46          RAISE_APPLICATION_ERROR(-20009, 'Error getting prisoner info: ' || SQLERRM);
+ 47          RETURN NULL;
+ 48  END get_prisoner_info;
+ 49  /
+
+Function GET_PRISONER_INFO compiled
+
+SQL> 
+SQL> PROMPT ✅ 5 Functions created successfully!
+✅ 5 Functions created successfully!
+SQL> 
+SQL> -- ============================================================
+SQL> -- PART 3: PROCEDURES (Minimum 3-5)
+SQL> -- ============================================================
+SQL> 
+SQL> PROMPT
+
+SQL> PROMPT Creating Procedures...
+Creating Procedures...
+SQL> PROMPT ============================
+============================
+SQL> 
+SQL> -- Procedure 1: Add New Prisoner with Validation
+SQL> CREATE OR REPLACE PROCEDURE add_new_prisoner(
+  2      p_national_id      IN VARCHAR2,
+  3      p_first_name       IN VARCHAR2,
+  4      p_last_name        IN VARCHAR2,
+  5      p_date_of_birth    IN DATE,
+  6      p_gender           IN CHAR,
+  7      p_offense_id       IN NUMBER,
+  8      p_court_name       IN VARCHAR2,
+  9      p_sentence_years   IN NUMBER,
+ 10      p_sentence_months  IN NUMBER DEFAULT 0,
+ 11      p_sentence_days    IN NUMBER DEFAULT 0,
+ 12      p_prison_id        IN NUMBER,
+ 13      p_cell_id          IN NUMBER DEFAULT NULL,
+ 14      p_out_prisoner_id  OUT NUMBER,
+ 15      p_out_assignment_id OUT NUMBER,
+ 16      p_out_sentence_id  OUT NUMBER
+ 17  )
+ 18  IS
+ 19      v_prisoner_id NUMBER;
+ 20      v_assignment_id NUMBER;
+ 21      v_sentence_id NUMBER;
+ 22      v_prison_capacity NUMBER;
+ 23      v_current_occupancy NUMBER;
+ 24      v_age NUMBER;
+ 25  BEGIN
+ 26      -- Validate national ID
+ 27      IF validate_national_id(p_national_id) != 'Y' THEN
+ 28          RAISE_APPLICATION_ERROR(-20010, 'Invalid national ID format');
+ 29      END IF;
+ 30  
+ 31      -- Calculate age
+ 32      v_age := TRUNC(MONTHS_BETWEEN(SYSDATE, p_date_of_birth) / 12);
+ 33      IF v_age < 15 THEN
+ 34          RAISE_APPLICATION_ERROR(-20011, 'Prisoner must be at least 15 years old');
+ 35      END IF;
+ 36  
+ 37      -- Check prison capacity
+ 38      SELECT capacity, 
+ 39             (SELECT COUNT(DISTINCT prisoner_id) 
+ 40              FROM prisoner_assignments 
+ 41              WHERE prison_id = p_prison_id 
+ 42              AND status = 'Active') 
+ 43      INTO v_prison_capacity, v_current_occupancy
+ 44      FROM prisons
+ 45      WHERE prison_id = p_prison_id
+ 46      AND status = 'Active';
+ 47  
+ 48      IF v_current_occupancy >= v_prison_capacity THEN
+ 49          RAISE_APPLICATION_ERROR(-20012, 'Prison is at full capacity');
+ 50      END IF;
+ 51  
+ 52      -- Check cell availability if specified
+ 53      IF p_cell_id IS NOT NULL THEN
+ 54          DECLARE
+ 55              v_cell_capacity NUMBER;
+ 56              v_cell_occupancy NUMBER;
+ 57          BEGIN
+ 58              SELECT cell_capacity, current_occupancy 
+ 59              INTO v_cell_capacity, v_cell_occupancy
+ 60              FROM cells
+ 61              WHERE cell_id = p_cell_id
+ 62              AND status IN ('Available', 'Occupied');
+ 63  
+ 64              IF v_cell_occupancy >= v_cell_capacity THEN
+ 65                  RAISE_APPLICATION_ERROR(-20013, 'Cell is at full capacity');
+ 66              END IF;
+ 67          EXCEPTION
+ 68              WHEN NO_DATA_FOUND THEN
+ 69                  RAISE_APPLICATION_ERROR(-20014, 'Invalid cell ID or cell not available');
+ 70          END;
+ 71      END IF;
+ 72  
+ 73      -- Insert prisoner
+ 74      INSERT INTO prisoners (
+ 75          prisoner_id, national_id, first_name, last_name, date_of_birth, gender,
+ 76          admission_date, status
+ 77      ) VALUES (
+ 78          seq_prisoner_id.NEXTVAL, p_national_id, p_first_name, p_last_name, 
+ 79          p_date_of_birth, p_gender, SYSDATE, 'Active'
+ 80      )
+ 81      RETURNING prisoner_id INTO v_prisoner_id;
+ 82  
+ 83      -- Insert sentence
+ 84      INSERT INTO sentences (
+ 85          sentence_id, prisoner_id, offense_id, case_number, court_name,
+ 86          conviction_date, sentence_type, sentence_duration_years,
+ 87          sentence_duration_months, sentence_duration_days,
+ 88          sentence_start_date, sentence_end_date, status
+ 89      ) VALUES (
+ 90          seq_sentence_id.NEXTVAL, v_prisoner_id, p_offense_id,
+ 91          'CR-' || LPAD(seq_sentence_id.CURRVAL, 6, '0'),
+ 92          p_court_name, SYSDATE, 'Imprisonment',
+ 93          p_sentence_years, p_sentence_months, p_sentence_days,
+ 94          SYSDATE, SYSDATE + (p_sentence_years * 365) + (p_sentence_months * 30) + p_sentence_days,
+ 95          'Active'
+ 96      )
+ 97      RETURNING sentence_id INTO v_sentence_id;
+ 98  
+ 99      -- Create prisoner assignment
+100      INSERT INTO prisoner_assignments (
+101          assignment_id, prisoner_id, prison_id, cell_id,
+102          assignment_date, assignment_reason, status
+103      ) VALUES (
+104          seq_assignment_id.NEXTVAL, v_prisoner_id, p_prison_id, p_cell_id,
+105          SYSDATE, 'New prisoner admission', 'Active'
+106      )
+107      RETURNING assignment_id INTO v_assignment_id;
+108  
+109      -- Update cell occupancy if cell assigned
+110      IF p_cell_id IS NOT NULL THEN
+111          UPDATE cells
+112          SET current_occupancy = current_occupancy + 1,
+113              status = CASE 
+114                          WHEN current_occupancy + 1 >= cell_capacity THEN 'Occupied'
+115                          ELSE 'Available'
+116                       END
+117          WHERE cell_id = p_cell_id;
+118      END IF;
+119  
+120      -- Update block occupancy
+121      UPDATE blocks b
+122      SET current_occupancy = (
+123          SELECT COUNT(DISTINCT pa.prisoner_id)
+124          FROM prisoner_assignments pa
+125          JOIN cells c ON pa.cell_id = c.cell_id
+126          WHERE c.block_id = b.block_id
+127          AND pa.status = 'Active'
+128      )
+129      WHERE block_id = (
+130          SELECT block_id FROM cells WHERE cell_id = p_cell_id
+131      );
+132  
+133      -- Set output parameters
+134      p_out_prisoner_id := v_prisoner_id;
+135      p_out_assignment_id := v_assignment_id;
+136      p_out_sentence_id := v_sentence_id;
+137  
+138      COMMIT;
+139      DBMS_OUTPUT.PUT_LINE('✅ New prisoner added successfully with ID: ' || v_prisoner_id);
+140  
+141  EXCEPTION
+142      WHEN DUP_VAL_ON_INDEX THEN
+143          ROLLBACK;
+144          RAISE_APPLICATION_ERROR(-20015, 'Duplicate national ID found');
+145      WHEN OTHERS THEN
+146          ROLLBACK;
+147          RAISE_APPLICATION_ERROR(-20016, 'Error adding prisoner: ' || SQLERRM);
+148  END add_new_prisoner;
+149  /
+
+Procedure ADD_NEW_PRISONER compiled
+
+SQL> 
+SQL> -- Procedure 2: Update Prisoner Status (Release/Transfer)
+SQL> CREATE OR REPLACE PROCEDURE update_prisoner_status(
+  2      p_prisoner_id      IN NUMBER,
+  3      p_new_status       IN VARCHAR2,
+  4      p_transfer_prison_id IN NUMBER DEFAULT NULL,
+  5      p_release_date     IN DATE DEFAULT NULL,
+  6      p_release_reason   IN VARCHAR2 DEFAULT NULL,
+  7      p_out_message      OUT VARCHAR2
+  8  )
+  9  IS
+ 10      v_current_status VARCHAR2(20);
+ 11      v_assignment_id NUMBER;
+ 12      v_cell_id NUMBER;
+ 13      v_prison_id NUMBER;
+ 14  BEGIN
+ 15      -- Get current status and assignment
+ 16      SELECT p.status, pa.assignment_id, pa.cell_id, pa.prison_id
+ 17      INTO v_current_status, v_assignment_id, v_cell_id, v_prison_id
+ 18      FROM prisoners p
+ 19      JOIN prisoner_assignments pa ON p.prisoner_id = pa.prisoner_id
+ 20      WHERE p.prisoner_id = p_prisoner_id
+ 21      AND pa.status = 'Active';
+ 22  
+ 23      -- Validate status transition
+ 24      IF v_current_status = 'Released' THEN
+ 25          RAISE_APPLICATION_ERROR(-20017, 'Cannot update status of a released prisoner');
+ 26      END IF;
+ 27  
+ 28      IF p_new_status NOT IN ('Active', 'Released', 'Transferred', 'Deceased', 'Escaped') THEN
+ 29          RAISE_APPLICATION_ERROR(-20018, 'Invalid status value');
+ 30      END IF;
+ 31  
+ 32      -- Update prisoner status
+ 33      UPDATE prisoners
+ 34      SET status = p_new_status,
+ 35          actual_release_date = CASE 
+ 36                                  WHEN p_new_status = 'Released' AND p_release_date IS NOT NULL 
+ 37                                  THEN p_release_date
+ 38                                  WHEN p_new_status = 'Released' 
+ 39                                  THEN SYSDATE
+ 40                                  ELSE actual_release_date
+ 41                                END,
+ 42          last_updated = SYSDATE
+ 43      WHERE prisoner_id = p_prisoner_id;
+ 44  
+ 45      -- Update assignment status
+ 46      UPDATE prisoner_assignments
+ 47      SET assignment_end_date = CASE 
+ 48                                  WHEN p_new_status IN ('Released', 'Transferred') 
+ 49                                  THEN SYSDATE 
+ 50                                END,
+ 51          status = CASE 
+ 52                      WHEN p_new_status IN ('Released', 'Transferred') THEN 'Completed'
+ 53                      ELSE status
+ 54                   END
+ 55      WHERE assignment_id = v_assignment_id;
+ 56  
+ 57      -- Update cell occupancy if prisoner was in a cell
+ 58      IF v_cell_id IS NOT NULL AND p_new_status IN ('Released', 'Transferred') THEN
+ 59          UPDATE cells
+ 60          SET current_occupancy = GREATEST(current_occupancy - 1, 0),
+ 61              status = CASE 
+ 62                          WHEN current_occupancy - 1 <= 0 THEN 'Available'
+ 63                          WHEN current_occupancy - 1 < cell_capacity THEN 'Available'
+ 64                          ELSE 'Occupied'
+ 65                       END
+ 66          WHERE cell_id = v_cell_id;
+ 67  
+ 68          -- Update block occupancy
+ 69          UPDATE blocks b
+ 70          SET current_occupancy = (
+ 71              SELECT COUNT(DISTINCT pa.prisoner_id)
+ 72              FROM prisoner_assignments pa
+ 73              JOIN cells c ON pa.cell_id = c.cell_id
+ 74              WHERE c.block_id = b.block_id
+ 75              AND pa.status = 'Active'
+ 76          )
+ 77          WHERE block_id = (
+ 78              SELECT block_id FROM cells WHERE cell_id = v_cell_id
+ 79          );
+ 80      END IF;
+ 81  
+ 82      -- If transferring to another prison
+ 83      IF p_new_status = 'Transferred' AND p_transfer_prison_id IS NOT NULL THEN
+ 84          -- Create new assignment in new prison
+ 85          INSERT INTO prisoner_assignments (
+ 86              assignment_id, prisoner_id, prison_id,
+ 87              assignment_date, assignment_reason, status
+ 88          ) VALUES (
+ 89              seq_assignment_id.NEXTVAL, p_prisoner_id, p_transfer_prison_id,
+ 90              SYSDATE, 'Prison transfer from ' || v_prison_id, 'Active'
+ 91          );
+ 92  
+ 93          p_out_message := 'Prisoner transferred to prison ID: ' || p_transfer_prison_id;
+ 94      ELSE
+ 95          p_out_message := 'Prisoner status updated to: ' || p_new_status;
+ 96      END IF;
+ 97  
+ 98      COMMIT;
+ 99      DBMS_OUTPUT.PUT_LINE('✅ Prisoner status updated successfully');
+100  
+101  EXCEPTION
+102      WHEN NO_DATA_FOUND THEN
+103          RAISE_APPLICATION_ERROR(-20019, 'Prisoner ID ' || p_prisoner_id || ' not found or no active assignment');
+104      WHEN OTHERS THEN
+105          ROLLBACK;
+106          RAISE_APPLICATION_ERROR(-20020, 'Error updating prisoner status: ' || SQLERRM);
+107  END update_prisoner_status;
+108  /
+
+Procedure UPDATE_PRISONER_STATUS compiled
+
+SQL> 
+SQL> -- Procedure 3: Record Medical Visit
+SQL> CREATE OR REPLACE PROCEDURE record_medical_visit(
+  2      p_prisoner_id          IN NUMBER,
+  3      p_diagnosis            IN VARCHAR2,
+  4      p_treatment            IN VARCHAR2,
+  5      p_prescribed_medication IN VARCHAR2,
+  6      p_attending_staff_id   IN NUMBER,
+  7      p_next_appointment_date IN DATE DEFAULT NULL,
+  8      p_notes                IN VARCHAR2 DEFAULT NULL,
+  9      p_out_record_id        OUT NUMBER
+ 10  )
+ 11  IS
+ 12      v_prisoner_status VARCHAR2(20);
+ 13      v_staff_department VARCHAR2(100);
+ 14      v_medical_record_id NUMBER;
+ 15  BEGIN
+ 16      -- Validate prisoner status
+ 17      SELECT status INTO v_prisoner_status
+ 18      FROM prisoners
+ 19      WHERE prisoner_id = p_prisoner_id;
+ 20  
+ 21      IF v_prisoner_status != 'Active' THEN
+ 22          RAISE_APPLICATION_ERROR(-20021, 'Cannot record medical visit for non-active prisoner');
+ 23      END IF;
+ 24  
+ 25      -- Validate staff is from medical department
+ 26      SELECT department INTO v_staff_department
+ 27      FROM staff
+ 28      WHERE staff_id = p_attending_staff_id
+ 29      AND status = 'Active';
+ 30  
+ 31      IF v_staff_department != 'Medical' THEN
+ 32          RAISE_APPLICATION_ERROR(-20022, 'Only medical staff can record medical visits');
+ 33      END IF;
+ 34  
+ 35      -- Insert medical record
+ 36      INSERT INTO medical_records (
+ 37          medical_record_id, prisoner_id, visit_date, diagnosis,
+ 38          treatment, prescribed_medication, attending_staff_id,
+ 39          next_appointment_date, notes
+ 40      ) VALUES (
+ 41          seq_medical_record_id.NEXTVAL, p_prisoner_id, SYSDATE, p_diagnosis,
+ 42          p_treatment, p_prescribed_medication, p_attending_staff_id,
+ 43          p_next_appointment_date, p_notes
+ 44      )
+ 45      RETURNING medical_record_id INTO v_medical_record_id;
+ 46  
+ 47      -- If diagnosis indicates emergency, create incident
+ 48      IF UPPER(p_diagnosis) LIKE '%EMERGENCY%' OR 
+ 49         UPPER(p_diagnosis) LIKE '%CRITICAL%' OR
+ 50         UPPER(p_diagnosis) LIKE '%URGENT%' THEN
+ 51  
+ 52          DECLARE
+ 53              v_prison_id NUMBER;
+ 54              v_incident_id NUMBER;
+ 55          BEGIN
+ 56              -- Get prison ID from assignment
+ 57              SELECT prison_id INTO v_prison_id
+ 58              FROM prisoner_assignments
+ 59              WHERE prisoner_id = p_prisoner_id
+ 60              AND status = 'Active'
+ 61              AND ROWNUM = 1;
+ 62  
+ 63              -- Create medical emergency incident
+ 64              INSERT INTO incidents (
+ 65                  incident_id, incident_type, severity, incident_date,
+ 66                  location, prison_id, reported_by_staff_id,
+ 67                  description, action_taken, status
+ 68              ) VALUES (
+ 69                  seq_incident_id.NEXTVAL, 'Medical Emergency', 'Critical',
+ 70                  SYSDATE, 'Medical Ward', v_prison_id, p_attending_staff_id,
+ 71                  'Medical emergency: ' || p_diagnosis,
+ 72                  'Treatment provided: ' || p_treatment,
+ 73                  'Resolved'
+ 74              )
+ 75              RETURNING incident_id INTO v_incident_id;
+ 76  
+ 77              -- Link prisoner to incident
+ 78              INSERT INTO incident_prisoners (
+ 79                  incident_prisoner_id, incident_id, prisoner_id,
+ 80                  involvement_type, disciplinary_action
+ 81              ) VALUES (
+ 82                  seq_incident_prisoner_id.NEXTVAL, v_incident_id, p_prisoner_id,
+ 83                  'Victim', NULL
+ 84              );
+ 85  
+ 86              DBMS_OUTPUT.PUT_LINE('⚠️ Medical emergency incident recorded: ' || v_incident_id);
+ 87          EXCEPTION
+ 88              WHEN NO_DATA_FOUND THEN
+ 89                  NULL; -- No prison assignment found, continue
+ 90          END;
+ 91      END IF;
+ 92  
+ 93      p_out_record_id := v_medical_record_id;
+ 94      COMMIT;
+ 95      DBMS_OUTPUT.PUT_LINE('✅ Medical visit recorded successfully with ID: ' || v_medical_record_id);
+ 96  
+ 97  EXCEPTION
+ 98      WHEN NO_DATA_FOUND THEN
+ 99          RAISE_APPLICATION_ERROR(-20023, 'Prisoner or staff not found');
+100      WHEN OTHERS THEN
+101          ROLLBACK;
+102          RAISE_APPLICATION_ERROR(-20024, 'Error recording medical visit: ' || SQLERRM);
+103  END record_medical_visit;
+104  /
+
+Procedure RECORD_MEDICAL_VISIT compiled
+
+SQL> 
+SQL> -- Procedure 4: Schedule Visit with Validation
+SQL> CREATE OR REPLACE PROCEDURE schedule_visit(
+  2      p_prisoner_id      IN NUMBER,
+  3      p_visitor_id       IN NUMBER,
+  4      p_visit_date       IN DATE,
+  5      p_visit_time_start IN TIMESTAMP,
+  6      p_visit_time_end   IN TIMESTAMP,
+  7      p_visit_type       IN VARCHAR2,
+  8      p_purpose          IN VARCHAR2 DEFAULT NULL,
+  9      p_approved_by      IN NUMBER,
+ 10      p_out_visit_id     OUT NUMBER,
+ 11      p_out_message      OUT VARCHAR2
+ 12  )
+ 13  IS
+ 14      v_prisoner_status VARCHAR2(20);
+ 15      v_visitor_status VARCHAR2(20);
+ 16      v_staff_position VARCHAR2(100);
+ 17      v_existing_visits NUMBER;
+ 18      v_visit_id NUMBER;
+ 19      v_max_daily_visits CONSTANT NUMBER := 3;
+ 20      v_max_visitor_visits CONSTANT NUMBER := 2;
+ 21  BEGIN
+ 22      -- Validate prisoner status
+ 23      SELECT status INTO v_prisoner_status
+ 24      FROM prisoners
+ 25      WHERE prisoner_id = p_prisoner_id;
+ 26  
+ 27      IF v_prisoner_status != 'Active' THEN
+ 28          RAISE_APPLICATION_ERROR(-20025, 'Visits can only be scheduled for active prisoners');
+ 29      END IF;
+ 30  
+ 31      -- Validate visitor status
+ 32      SELECT status INTO v_visitor_status
+ 33      FROM visitors
+ 34      WHERE visitor_id = p_visitor_id;
+ 35  
+ 36      IF v_visitor_status != 'Approved' THEN
+ 37          RAISE_APPLICATION_ERROR(-20026, 'Visitor is not approved for visits');
+ 38      END IF;
+ 39  
+ 40      -- Validate staff has authority to approve visits
+ 41      SELECT position INTO v_staff_position
+ 42      FROM staff
+ 43      WHERE staff_id = p_approved_by
+ 44      AND status = 'Active';
+ 45  
+ 46      IF v_staff_position NOT IN ('Warden', 'Deputy Warden', 'Senior Officer', 'Prison Officer') THEN
+ 47          RAISE_APPLICATION_ERROR(-20027, 'Staff member does not have authority to approve visits');
+ 48      END IF;
+ 49  
+ 50      -- Check visit time constraints
+ 51      IF p_visit_time_end <= p_visit_time_start THEN
+ 52          RAISE_APPLICATION_ERROR(-20028, 'Visit end time must be after start time');
+ 53      END IF;
+ 54  
+ 55      IF EXTRACT(HOUR FROM CAST(p_visit_time_start AS TIMESTAMP)) < 9 OR
+ 56         EXTRACT(HOUR FROM CAST(p_visit_time_end AS TIMESTAMP)) > 17 THEN
+ 57          RAISE_APPLICATION_ERROR(-20029, 'Visits can only be scheduled between 9 AM and 5 PM');
+ 58      END IF;
+ 59  
+ 60      -- Check prisoner's daily visit limit
+ 61      SELECT COUNT(*) INTO v_existing_visits
+ 62      FROM visits
+ 63      WHERE prisoner_id = p_prisoner_id
+ 64      AND TRUNC(visit_date) = TRUNC(p_visit_date)
+ 65      AND status IN ('Scheduled', 'Completed');
+ 66  
+ 67      IF v_existing_visits >= v_max_daily_visits THEN
+ 68          RAISE_APPLICATION_ERROR(-20030, 'Prisoner has reached daily visit limit');
+ 69      END IF;
+ 70  
+ 71      -- Check visitor's daily visit limit
+ 72      SELECT COUNT(*) INTO v_existing_visits
+ 73      FROM visits
+ 74      WHERE visitor_id = p_visitor_id
+ 75      AND TRUNC(visit_date) = TRUNC(p_visit_date)
+ 76      AND status IN ('Scheduled', 'Completed');
+ 77  
+ 78      IF v_existing_visits >= v_max_visitor_visits THEN
+ 79          RAISE_APPLICATION_ERROR(-20031, 'Visitor has reached daily visit limit');
+ 80      END IF;
+ 81  
+ 82      -- Insert visit record
+ 83      INSERT INTO visits (
+ 84          visit_id, prisoner_id, visitor_id, visit_date,
+ 85          visit_time_start, visit_time_end, visit_type,
+ 86          approved_by_staff_id, purpose, notes, status
+ 87      ) VALUES (
+ 88          seq_visit_id.NEXTVAL, p_prisoner_id, p_visitor_id, p_visit_date,
+ 89          p_visit_time_start, p_visit_time_end, p_visit_type,
+ 90          p_approved_by, p_purpose, 'Auto-generated by scheduling system', 'Scheduled'
+ 91      )
+ 92      RETURNING visit_id INTO v_visit_id;
+ 93  
+ 94      p_out_visit_id := v_visit_id;
+ 95      p_out_message := 'Visit scheduled successfully for ' || 
+ 96                       TO_CHAR(p_visit_date, 'DD-MON-YYYY') || ' ' ||
+ 97                       TO_CHAR(p_visit_time_start, 'HH24:MI');
+ 98  
+ 99      COMMIT;
+100      DBMS_OUTPUT.PUT_LINE('✅ Visit scheduled successfully with ID: ' || v_visit_id);
+101  
+102  EXCEPTION
+103      WHEN NO_DATA_FOUND THEN
+104          RAISE_APPLICATION_ERROR(-20032, 'Prisoner, visitor, or staff not found');
+105      WHEN OTHERS THEN
+106          ROLLBACK;
+107          RAISE_APPLICATION_ERROR(-20033, 'Error scheduling visit: ' || SQLERRM);
+108  END schedule_visit;
+109  /
+
+Procedure SCHEDULE_VISIT compiled
+
+Errors: check compiler log
+SQL> 
+SQL> -- Procedure 5: Generate Prison Statistics Report
+SQL> CREATE OR REPLACE PROCEDURE generate_prison_report(
+  2      p_prison_id IN NUMBER,
+  3      p_report_type IN VARCHAR2 DEFAULT 'SUMMARY',
+  4      p_out_report OUT CLOB
+  5  )
+  6  IS
+  7      v_prison_name VARCHAR2(100);
+  8      v_capacity NUMBER;
+  9      v_current_population NUMBER;
+ 10      v_utilization_percent NUMBER;
+ 11      v_report_text CLOB;
+ 12  
+ 13      -- Cursor for prisoner demographics
+ 14      CURSOR c_demographics IS
+ 15          SELECT 
+ 16              gender,
+ 17              COUNT(*) as count,
+ 18              ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage,
+ 19              AVG(calculate_prisoner_age(prisoner_id)) as avg_age
+ 20          FROM prisoners p
+ 21          WHERE prisoner_id IN (
+ 22              SELECT prisoner_id 
+ 23              FROM prisoner_assignments 
+ 24              WHERE prison_id = p_prison_id 
+ 25              AND status = 'Active'
+ 26          )
+ 27          AND status = 'Active'
+ 28          GROUP BY gender
+ 29          ORDER BY gender;
+ 30  
+ 31      -- Cursor for top offenses
+ 32      CURSOR c_top_offenses IS
+ 33          SELECT 
+ 34              o.offense_name,
+ 35              COUNT(s.sentence_id) as offense_count,
+ 36              ROUND(COUNT(s.sentence_id) * 100.0 / SUM(COUNT(s.sentence_id)) OVER (), 2) as percentage
+ 37          FROM sentences s
+ 38          JOIN offenses o ON s.offense_id = o.offense_id
+ 39          WHERE s.prisoner_id IN (
+ 40              SELECT prisoner_id 
+ 41              FROM prisoner_assignments 
+ 42              WHERE prison_id = p_prison_id 
+ 43              AND status = 'Active'
+ 44          )
+ 45          AND s.status = 'Active'
+ 46          GROUP BY o.offense_name
+ 47          ORDER BY offense_count DESC
+ 48          FETCH FIRST 5 ROWS ONLY;
+ 49  
+ 50      -- Cursor for block utilization
+ 51      CURSOR c_block_utilization IS
+ 52          SELECT 
+ 53              b.block_name,
+ 54              b.block_type,
+ 55              b.capacity,
+ 56              COUNT(DISTINCT pa.prisoner_id) as current_occupancy,
+ 57              ROUND(COUNT(DISTINCT pa.prisoner_id) * 100.0 / b.capacity, 2) as utilization_percent
+ 58          FROM blocks b
+ 59          LEFT JOIN cells c ON b.block_id = c.block_id
+ 60          LEFT JOIN prisoner_assignments pa ON c.cell_id = pa.cell_id AND pa.status = 'Active'
+ 61          WHERE b.prison_id = p_prison_id
+ 62          GROUP BY b.block_id, b.block_name, b.block_type, b.capacity
+ 63          ORDER BY b.block_name;
+ 64  BEGIN
+ 65      -- Get prison basic information
+ 66      SELECT prison_name, capacity INTO v_prison_name, v_capacity
+ 67      FROM prisons
+ 68      WHERE prison_id = p_prison_id;
+ 69  
+ 70      -- Get current population
+ 71      SELECT COUNT(DISTINCT prisoner_id) INTO v_current_population
+ 72      FROM prisoner_assignments
+ 73      WHERE prison_id = p_prison_id
+ 74      AND status = 'Active';
+ 75  
+ 76      -- Calculate utilization
+ 77      v_utilization_percent := get_prison_utilization(p_prison_id);
+ 78  
+ 79      -- Start building report
+ 80      v_report_text := 'PRISON MANAGEMENT SYSTEM - STATISTICAL REPORT' || CHR(10);
+ 81      v_report_text := v_report_text || '===============================================' || CHR(10) || CHR(10);
+ 82      v_report_text := v_report_text || 'Prison: ' || v_prison_name || CHR(10);
+ 83      v_report_text := v_report_text || 'Report Type: ' || p_report_type || CHR(10);
+ 84      v_report_text := v_report_text || 'Generated: ' || TO_CHAR(SYSDATE, 'DD-MON-YYYY HH24:MI:SS') || CHR(10);
+ 85      v_report_text := v_report_text || '===============================================' || CHR(10) || CHR(10);
+ 86  
+ 87      -- Basic statistics
+ 88      v_report_text := v_report_text || 'BASIC STATISTICS:' || CHR(10);
+ 89      v_report_text := v_report_text || '-----------------' || CHR(10);
+ 90      v_report_text := v_report_text || 'Capacity: ' || v_capacity || CHR(10);
+ 91      v_report_text := v_report_text || 'Current Population: ' || v_current_population || CHR(10);
+ 92      v_report_text := v_report_text || 'Utilization: ' || v_utilization_percent || '%' || CHR(10) || CHR(10);
+ 93  
+ 94      -- Demographics section
+ 95      v_report_text := v_report_text || 'PRISONER DEMOGRAPHICS:' || CHR(10);
+ 96      v_report_text := v_report_text || '----------------------' || CHR(10);
+ 97  
+ 98      FOR rec IN c_demographics LOOP
+ 99          v_report_text := v_report_text || 
+100              rec.gender || ': ' || rec.count || ' prisoners (' || rec.percentage || '%), ' ||
+101              'Average Age: ' || ROUND(rec.avg_age, 1) || CHR(10);
+102      END LOOP;
+103  
+104      v_report_text := v_report_text || CHR(10);
+105  
+106      -- Top offenses section
+107      v_report_text := v_report_text || 'TOP 5 OFFENSES:' || CHR(10);
+108      v_report_text := v_report_text || '---------------' || CHR(10);
+109  
+110      FOR rec IN c_top_offenses LOOP
+111          v_report_text := v_report_text || 
+112              rec.offense_name || ': ' || rec.offense_count || ' cases (' || rec.percentage || '%)' || CHR(10);
+113      END LOOP;
+114  
+115      v_report_text := v_report_text || CHR(10);
+116  
+117      -- Block utilization section
+118      v_report_text := v_report_text || 'BLOCK UTILIZATION:' || CHR(10);
+119      v_report_text := v_report_text || '------------------' || CHR(10);
+120  
+121      FOR rec IN c_block_utilization LOOP
+122          v_report_text := v_report_text || 
+123              rec.block_name || ' (' || rec.block_type || '): ' || 
+124              rec.current_occupancy || '/' || rec.capacity || ' (' || 
+125              rec.utilization_percent || '%)' || CHR(10);
+126      END LOOP;
+127  
+128      -- Add summary based on report type
+129      IF p_report_type = 'DETAILED' THEN
+130          v_report_text := v_report_text || CHR(10) || 'DETAILED ANALYSIS:' || CHR(10);
+131          v_report_text := v_report_text || '-------------------' || CHR(10);
+132  
+133          -- Add program participation
+134          DECLARE
+135              v_total_enrollments NUMBER;
+136              v_avg_programs_per_prisoner NUMBER;
+137          BEGIN
+138              SELECT COUNT(*), 
+139                     ROUND(COUNT(*) * 1.0 / v_current_population, 2)
+140              INTO v_total_enrollments, v_avg_programs_per_prisoner
+141              FROM program_enrollments pe
+142              WHERE pe.prisoner_id IN (
+143                  SELECT prisoner_id 
+144                  FROM prisoner_assignments 
+145                  WHERE prison_id = p_prison_id 
+146                  AND status = 'Active'
+147              )
+148              AND pe.completion_status IN ('Enrolled', 'In Progress');
+149  
+150              v_report_text := v_report_text || 
+151                  'Total Program Enrollments: ' || v_total_enrollments || CHR(10) ||
+152                  'Average Programs per Prisoner: ' || v_avg_programs_per_prisoner || CHR(10);
+153          EXCEPTION
+154              WHEN NO_DATA_FOUND THEN
+155                  NULL;
+156          END;
+157      END IF;
+158  
+159      -- Add footer
+160      v_report_text := v_report_text || CHR(10
+
+Procedure GENERATE_PRISON_REPORT compiled
+
+Errors: check compiler log
