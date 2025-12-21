@@ -19,15 +19,8 @@ PROMPT
 PROMPT Creating Data Tablespace (PRISON_DATA_TBS)...
 PROMPT ============================================================
 
-CREATE TABLESPACE PRISON_DATA_TBS
-DATAFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\prison_data_01.dbf'
-SIZE 100M
-AUTOEXTEND ON 
-NEXT 10M 
-MAXSIZE 2G
-EXTENT MANAGEMENT LOCAL AUTOALLOCATE
-SEGMENT SPACE MANAGEMENT AUTO
-ONLINE;
+ CREATE TABLESPACE PMS_DATA  DATAFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\pms_data01.dbf'   SIZE 200M  AUTOEXTEND ON  NEXT 50M  MAXSIZE UNLIMITED  EXTENT MANAGEMENT LOCAL  SEGMENT SPACE MANAGEMENT AUTO;
+
 
 PROMPT ✅ Data tablespace created successfully!
 PROMPT
@@ -35,15 +28,7 @@ PROMPT
 PROMPT Creating Index Tablespace (PRISON_INDEX_TBS)...
 PROMPT ============================================================
 
-CREATE TABLESPACE PRISON_INDEX_TBS
-DATAFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\prison_index_01.dbf'
-SIZE 50M
-AUTOEXTEND ON 
-NEXT 5M 
-MAXSIZE 1G
-EXTENT MANAGEMENT LOCAL AUTOALLOCATE
-SEGMENT SPACE MANAGEMENT AUTO
-ONLINE;
+CREATE TABLESPACE PMS_INDEXES  DATAFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\pms_indexes01.dbf'  SIZE 100M  AUTOEXTEND ON  NEXT 25M  MAXSIZE UNLIMITED  EXTENT MANAGEMENT LOCAL  SEGMENT SPACE MANAGEMENT AUTO;
 
 PROMPT ✅ Index tablespace created successfully!
 PROMPT
@@ -51,81 +36,20 @@ PROMPT
 PROMPT Creating Temporary Tablespace (PRISON_TEMP_TBS)...
 PROMPT ============================================================
 
-CREATE TEMPORARY TABLESPACE PRISON_TEMP_TBS
-TEMPFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\prison_temp_01.dbf'
-SIZE 50M
-AUTOEXTEND ON 
-NEXT 5M 
-MAXSIZE 500M
-EXTENT MANAGEMENT LOCAL UNIFORM SIZE 1M;
-
+CREATE TEMPORARY TABLESPACE PMS_TEMP  TEMPFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\pms_temp01.dbf'  SIZE 100M  AUTOEXTEND ON  NEXT 20M  MAXSIZE UNLIMITED;
 PROMPT ✅ Temporary tablespace created successfully!
 PROMPT
 
 PROMPT Creating LOB Tablespace for Documents (PRISON_LOB_TBS)...
 PROMPT ============================================================
 
-CREATE TABLESPACE PRISON_LOB_TBS
-DATAFILE 'C:\APP\HP\PRODUCT\21C\ORADATA\XE\GRPD_27453_JOCKEBED_PRISONMANAGEMENTSYSTEM_DB\prison_lob_01.dbf'
-SIZE 50M
-AUTOEXTEND ON 
-NEXT 10M 
-MAXSIZE 1G
-EXTENT MANAGEMENT LOCAL AUTOALLOCATE
-SEGMENT SPACE MANAGEMENT AUTO
-ONLINE;
-
-PROMPT ✅ LOB tablespace created successfully!
-PROMPT
 
 PROMPT Verifying Tablespaces...
 PROMPT ============================================================
 
-SELECT 
-    tablespace_name,
-    status,
-    contents,
-    ROUND(bytes/1024/1024, 2) AS size_mb,
-    ROUND(maxbytes/1024/1024, 2) AS max_size_mb,
-    autoextensible
-FROM dba_data_files
-WHERE tablespace_name LIKE 'PRISON%'
-UNION ALL
-SELECT 
-    tablespace_name,
-    status,
-    contents,
-    ROUND(bytes/1024/1024, 2) AS size_mb,
-    ROUND(maxbytes/1024/1024, 2) AS max_size_mb,
-    autoextensible
-FROM dba_temp_files
-WHERE tablespace_name LIKE 'PRISON%'
-ORDER BY tablespace_name;
+SELECT tablespace_name, status, contents FROM dba_tablespaces WHERE tablespace_name IN ('PMS_DATA', 'PMS_INDEXES', 'PMS_TEMP');
 
-PROMPT
-PROMPT Tablespace Summary:
-PROMPT ============================================================
 
-SELECT 
-    tablespace_name,
-    status,
-    contents,
-    COUNT(*) as file_count
-FROM dba_tablespaces
-WHERE tablespace_name LIKE 'PRISON%'
-GROUP BY tablespace_name, status, contents
-ORDER BY tablespace_name;
-
-PROMPT
-PROMPT Setting Default Tablespaces for Admin User...
-PROMPT ============================================================
-
-ALTER USER jockebed_admin 
-    DEFAULT TABLESPACE PRISON_DATA_TBS
-    TEMPORARY TABLESPACE PRISON_TEMP_TBS
-    QUOTA UNLIMITED ON PRISON_DATA_TBS
-    QUOTA UNLIMITED ON PRISON_INDEX_TBS
-    QUOTA UNLIMITED ON PRISON_LOB_TBS;
 
 PROMPT ✅ Default tablespaces set for admin user!
 PROMPT
@@ -138,7 +62,7 @@ PROMPT Tablespaces Created:
 PROMPT   1. PRISON_DATA_TBS   - Main data storage (100MB -> 2GB)
 PROMPT   2. PRISON_INDEX_TBS  - Index storage (50MB -> 1GB)
 PROMPT   3. PRISON_TEMP_TBS   - Temporary operations (50MB -> 500MB)
-PROMPT   4. PRISON_LOB_TBS    - Document storage (50MB -> 1GB)
+
 PROMPT
 PROMPT All tablespaces have AUTOEXTEND enabled
 PROMPT ============================================================
